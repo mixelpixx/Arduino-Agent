@@ -1,6 +1,6 @@
 {
   "name": "arduino-mcp-extension",
-  "version": "0.5.0",
+  "version": "0.5.3",
   "description": "MCP (Model Context Protocol) server embedded in Arduino IDE - HTTP/SSE transport",
   "license": "AGPL-3.0-or-later",
   "main": "lib/node/arduino-mcp-backend-module",
