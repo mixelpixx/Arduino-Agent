@@ -5403,7 +5403,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"arduino-mcp-extension@npm:0.5.0, arduino-mcp-extension@workspace:arduino-mcp-extension":
+"arduino-mcp-extension@npm:0.5.3, arduino-mcp-extension@workspace:arduino-mcp-extension":
   version: 0.0.0-use.local
   resolution: "arduino-mcp-extension@workspace:arduino-mcp-extension"
   dependencies:
@@ -8275,7 +8275,7 @@ __metadata:
     "@theia/terminal": "npm:1.57.0"
     "@theia/workspace": "npm:1.57.0"
     arduino-ide-extension: "npm:2.3.7"
-    arduino-mcp-extension: "npm:0.5.0"
+    arduino-mcp-extension: "npm:0.5.3"
     chmodr: "npm:^1.2.0"
     compression-webpack-plugin: "npm:^9.0.0"
     copy-webpack-plugin: "npm:^8.1.1"
