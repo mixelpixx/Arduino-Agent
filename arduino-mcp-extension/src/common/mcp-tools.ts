@@ -277,7 +277,7 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
   {
     name: 'arduino_serial',
     description:
-      'Serial monitor operations - connect to a board, read its output, send data, change the baud rate. The connection is shared with the IDE serial monitor.',
+      'Serial monitor operations - connect to a board, read its output, send data, change the baud rate. Reads are cursor-based: every read returns a `cursor`; pass it back as `since` to page through output losslessly. wait_for blocks until a line matching a pattern arrives. The connection is shared with the IDE serial monitor.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -287,6 +287,7 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
             'connect',
             'disconnect',
             'read',
+            'wait_for',
             'write',
             'clear',
             'get_config',
@@ -321,6 +322,26 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
         max_lines: {
           type: 'number',
           description: 'Maximum lines to return for read (default: 100)',
+        },
+        since: {
+          type: 'number',
+          description:
+            'Cursor from a previous read/wait_for response (for read, wait_for). Returns only output at or after that offset, with `dropped` counting anything lost to buffer overflow - lossless paging instead of an overlapping tail.',
+        },
+        pattern: {
+          type: 'string',
+          description:
+            'Substring (or regex when is_regex=true) to wait for (for wait_for). Blocks until a matching line arrives.',
+        },
+        is_regex: {
+          type: 'boolean',
+          description:
+            'Treat pattern as a regular expression (for wait_for; default: false)',
+        },
+        timeout_seconds: {
+          type: 'number',
+          description:
+            'Max seconds wait_for blocks (default 30, clamp 1-120). A timeout returns matched:false with a cursor - not an error.',
         },
       },
       required: ['action'],

@@ -363,11 +363,19 @@ error) and can keep waiting with `arduino_task_status {wait:true}`. Without
 | `list_ports` | - | List available serial ports |
 | `connect` | `port`, `baud_rate`, `fqbn` (optional) | Open connection |
 | `disconnect` | - | Close connection |
-| `read` | `max_lines` | Read buffered board output |
+| `read` | `max_lines`, `since` | Read buffered board output (cursor-based) |
+| `wait_for` | `pattern`, `is_regex`, `timeout_seconds`, `since` | Block until a matching line arrives |
 | `write` | `data`, `line_ending` | Send data |
-| `clear` | - | Clear read buffer |
+| `clear` | - | Clear read buffer (cursors stay monotonic) |
 | `get_config` | - | Get current connection config |
 | `set_config` | `baud_rate` | Update connection settings |
+
+Every `read`/`wait_for` response includes a `cursor`. Pass it back as `since`
+to page through output **losslessly**: you get the next lines after that
+offset, a `dropped` count if the 512 KB buffer overflowed in between, and
+`has_more` when more complete lines are already buffered. Without `since`,
+`read` returns the familiar tail snapshot. `wait_for` resolves with the
+matching line, or `timed_out: true` / `disconnected: true` (never an error).
 
 ### arduino_library
 

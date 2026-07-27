@@ -26,6 +26,24 @@ export const SUPPORTED_BAUD_RATES = [
 
 const MAX_BUFFER_CHARS = 512 * 1024; // cap the capture buffer at 512 KB
 
+/** Result shape for waitFor - see that method for the three resolutions. */
+export interface SerialWaitResult {
+  matched: boolean;
+  line?: string;
+  cursor: number;
+  elapsed_ms?: number;
+  timed_out?: boolean;
+  disconnected?: boolean;
+  hint?: string;
+}
+
+interface SerialWaiter {
+  regex: RegExp;
+  startedAt: number;
+  timer: NodeJS.Timeout;
+  resolve: (result: SerialWaitResult) => void;
+}
+
 interface ActiveConnection {
   board: { name: string; fqbn: string };
   port: Port;
@@ -33,6 +51,22 @@ interface ActiveConnection {
   ws: WebSocket;
   buffer: string;
   connected: boolean;
+  /**
+   * Global char offset of buffer[0]. Cursors handed to callers are global
+   * offsets (bufferStartOffset + index into buffer), so they stay valid and
+   * monotonically increasing across buffer truncation and clear() - a stale
+   * cursor is reported as `dropped` chars instead of silently returning the
+   * wrong window. The total received so far is bufferStartOffset + buffer.length.
+   */
+  bufferStartOffset: number;
+  /** Partial trailing line carried between chunks for the line scanner. */
+  lineRemainder: string;
+  /** Pending wait_for calls, resolved by the line scanner. */
+  waiters: SerialWaiter[];
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export class MCPSerialManager {
@@ -166,6 +200,9 @@ export class MCPSerialManager {
         ws,
         buffer: '',
         connected: false,
+        bufferStartOffset: 0,
+        lineRemainder: '',
+        waiters: [],
       };
 
       ws.on('open', () => {
@@ -178,19 +215,27 @@ export class MCPSerialManager {
           reject(err);
         }
         connection.connected = false;
+        this.flushWaiters(connection);
       });
       ws.on('close', () => {
         connection.connected = false;
+        this.flushWaiters(connection);
       });
       ws.on('message', (raw) => {
         try {
           const message = JSON.parse(raw.toString());
           if (Array.isArray(message)) {
             // Board output: an array of string chunks.
-            connection.buffer += message.join('');
+            const chunk = message.join('');
+            connection.buffer += chunk;
             if (connection.buffer.length > MAX_BUFFER_CHARS) {
+              // Advance the global offset by exactly what we drop, so cursors
+              // handed out earlier stay meaningful (they report as `dropped`).
+              connection.bufferStartOffset +=
+                connection.buffer.length - MAX_BUFFER_CHARS;
               connection.buffer = connection.buffer.slice(-MAX_BUFFER_CHARS);
             }
+            this.processChunk(connection, chunk);
           } else if (
             message?.command === Monitor.MiddlewareCommand.ON_SETTINGS_DID_CHANGE
           ) {
@@ -207,12 +252,78 @@ export class MCPSerialManager {
     });
   }
 
+  /**
+   * Line scanner: assembles complete lines across chunk boundaries (chunks
+   * arrive mid-line) and feeds them to pending wait_for waiters. Each line
+   * carries the global cursor just past its newline.
+   */
+  private processChunk(connection: ActiveConnection, chunk: string): void {
+    let data = connection.lineRemainder + chunk;
+    // Global offset of the start of `data`. Total received so far is
+    // bufferStartOffset + buffer.length (the chunk is already appended); back
+    // up over the chunk and the carried remainder to find where `data` begins.
+    let dataStart =
+      connection.bufferStartOffset +
+      connection.buffer.length -
+      chunk.length -
+      connection.lineRemainder.length;
+    let index: number;
+    while ((index = data.indexOf('\n')) !== -1) {
+      const line = data.slice(0, index).replace(/\r$/, '');
+      const lineEndCursor = dataStart + index + 1;
+      this.handleCompleteLine(connection, line, lineEndCursor);
+      data = data.slice(index + 1);
+      dataStart += index + 1;
+    }
+    connection.lineRemainder = data;
+  }
+
+  private handleCompleteLine(
+    connection: ActiveConnection,
+    line: string,
+    lineEndCursor: number
+  ): void {
+    if (!connection.waiters.length) {
+      return;
+    }
+    const matched = connection.waiters.filter((w) => w.regex.test(line));
+    for (const waiter of matched) {
+      clearTimeout(waiter.timer);
+      waiter.resolve({
+        matched: true,
+        line,
+        cursor: lineEndCursor,
+        elapsed_ms: Date.now() - waiter.startedAt,
+      });
+    }
+    if (matched.length) {
+      connection.waiters = connection.waiters.filter(
+        (w) => !matched.includes(w)
+      );
+    }
+  }
+
+  /** Resolves every pending waiter as disconnected (close, error, disconnect). */
+  private flushWaiters(connection: ActiveConnection): void {
+    const waiters = connection.waiters;
+    connection.waiters = [];
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve({
+        matched: false,
+        disconnected: true,
+        cursor: connection.bufferStartOffset + connection.buffer.length,
+      });
+    }
+  }
+
   async disconnect(): Promise<void> {
     const connection = this.connection;
     if (!connection) {
       return;
     }
     this.connection = null;
+    this.flushWaiters(connection);
     try {
       connection.ws.close();
     } catch {
@@ -224,15 +335,143 @@ export class MCPSerialManager {
       .catch(() => undefined);
   }
 
-  read(maxLines: number): { lines: string[]; count: number } {
+  /**
+   * Reads captured output.
+   *
+   * Without `since`: the last `maxLines` lines (a tail snapshot), plus the
+   * current global `cursor` so the next call can page losslessly.
+   *
+   * With `since` (a cursor from a previous response): the FIRST `maxLines`
+   * complete lines at or after that offset, `cursor` set just past the last
+   * returned line, `dropped` counting chars lost to buffer truncation before
+   * `since`, and `has_more` when further complete lines are already buffered.
+   * A trailing partial line is held back until its newline arrives.
+   */
+  read(
+    maxLines: number,
+    since?: number
+  ): {
+    lines: string[];
+    count: number;
+    cursor: number;
+    dropped: number;
+    has_more: boolean;
+  } {
     const connection = this.requireConnection();
-    const lines = connection.buffer.split(/\r?\n/);
-    // Drop a trailing empty segment caused by a terminating newline.
-    if (lines.length && lines[lines.length - 1] === '') {
-      lines.pop();
+    const end = connection.bufferStartOffset + connection.buffer.length;
+
+    if (since === undefined) {
+      const lines = connection.buffer.split(/\r?\n/);
+      // Drop a trailing empty segment caused by a terminating newline.
+      if (lines.length && lines[lines.length - 1] === '') {
+        lines.pop();
+      }
+      const slice = lines.slice(-maxLines);
+      return {
+        lines: slice,
+        count: slice.length,
+        cursor: end,
+        dropped: 0,
+        has_more: false,
+      };
     }
-    const slice = lines.slice(-maxLines);
-    return { lines: slice, count: slice.length };
+
+    const clamped = Math.max(
+      connection.bufferStartOffset,
+      Math.min(since, end)
+    );
+    const dropped = Math.max(0, connection.bufferStartOffset - since);
+    const region = connection.buffer.slice(
+      clamped - connection.bufferStartOffset
+    );
+
+    const lines: string[] = [];
+    let pos = 0;
+    while (lines.length < maxLines) {
+      const nl = region.indexOf('\n', pos);
+      if (nl === -1) {
+        break;
+      }
+      lines.push(region.slice(pos, nl).replace(/\r$/, ''));
+      pos = nl + 1;
+    }
+    return {
+      lines,
+      count: lines.length,
+      cursor: clamped + pos,
+      dropped,
+      has_more: region.indexOf('\n', pos) !== -1,
+    };
+  }
+
+  /**
+   * Blocks until a line matching `pattern` arrives, the timeout elapses, or
+   * the connection drops. When `since` is given, already-buffered complete
+   * lines from that cursor are scanned first, so output that arrived between
+   * calls cannot be missed.
+   */
+  async waitFor(
+    pattern: string,
+    isRegex: boolean,
+    timeoutSeconds: number,
+    since?: number
+  ): Promise<SerialWaitResult> {
+    const connection = this.requireConnection();
+    let regex: RegExp;
+    try {
+      regex = isRegex ? new RegExp(pattern) : new RegExp(escapeRegExp(pattern));
+    } catch (e) {
+      throw new Error(
+        `Invalid regular expression "${pattern}": ${
+          e instanceof Error ? e.message : e
+        }`
+      );
+    }
+    const startedAt = Date.now();
+    const end = connection.bufferStartOffset + connection.buffer.length;
+
+    // Scan what is already buffered (complete lines only) from `since`.
+    if (since !== undefined) {
+      const clamped = Math.max(
+        connection.bufferStartOffset,
+        Math.min(since, end)
+      );
+      const region = connection.buffer.slice(
+        clamped - connection.bufferStartOffset
+      );
+      let pos = 0;
+      let nl: number;
+      while ((nl = region.indexOf('\n', pos)) !== -1) {
+        const line = region.slice(pos, nl).replace(/\r$/, '');
+        if (regex.test(line)) {
+          return {
+            matched: true,
+            line,
+            cursor: clamped + nl + 1,
+            elapsed_ms: Date.now() - startedAt,
+          };
+        }
+        pos = nl + 1;
+      }
+    }
+
+    return new Promise<SerialWaitResult>((resolve) => {
+      const waiter: SerialWaiter = {
+        regex,
+        startedAt,
+        resolve,
+        timer: setTimeout(() => {
+          connection.waiters = connection.waiters.filter((w) => w !== waiter);
+          resolve({
+            matched: false,
+            timed_out: true,
+            cursor: connection.bufferStartOffset + connection.buffer.length,
+            hint: `No line matched within ${timeoutSeconds}s. Use read with since=<your last cursor> to inspect what the board actually printed.`,
+          });
+        }, timeoutSeconds * 1000),
+      };
+      connection.waiters.push(waiter);
+    });
   }
 
   write(data: string): { bytesSent: number } {
@@ -267,8 +506,14 @@ export class MCPSerialManager {
   }
 
   clear(): void {
-    if (this.connection) {
-      this.connection.buffer = '';
+    const c = this.connection;
+    if (c) {
+      // Cursors stay monotonic across clear(): advance the start offset so a
+      // stale cursor from before the clear reports `dropped` chars instead of
+      // silently mapping onto unrelated new output.
+      c.bufferStartOffset += c.buffer.length;
+      c.buffer = '';
+      c.lineRemainder = '';
     }
   }
 
@@ -277,6 +522,8 @@ export class MCPSerialManager {
     port: string | null;
     baudRate: number | null;
     board: string | null;
+    cursor: number | null;
+    buffered_chars: number | null;
   } {
     const c = this.connection;
     return {
@@ -284,6 +531,8 @@ export class MCPSerialManager {
       port: c?.port.address ?? null,
       baudRate: c?.baudRate ?? null,
       board: c?.board.name ?? null,
+      cursor: c ? c.bufferStartOffset + c.buffer.length : null,
+      buffered_chars: c ? c.buffer.length : null,
     };
   }
 
