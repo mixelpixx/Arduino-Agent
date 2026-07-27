@@ -175,11 +175,24 @@ async function main() {
     },
   });
   const sessionId = initResponse.headers['mcp-session-id'];
+  let serverInstructions = '';
   if (initResponse.status === 200 && sessionId) {
     const initPayload = parsePayload(initResponse);
     pass(
       `initialized session ${sessionId} (server: ${initPayload.result?.serverInfo?.name})`
     );
+    // 4b. instructions + prompts capability
+    serverInstructions = initPayload.result?.instructions ?? '';
+    if (serverInstructions.length > 100) {
+      pass(`initialize carries instructions (${serverInstructions.length} chars)`);
+    } else {
+      fail('initialize result has no (or trivial) instructions');
+    }
+    if (initPayload.result?.capabilities?.prompts) {
+      pass('prompts capability advertised');
+    } else {
+      fail('prompts capability missing from initialize result');
+    }
   } else {
     fail(`initialize failed with status ${initResponse.status}: ${initResponse.body}`);
     process.exit(1);
@@ -225,12 +238,116 @@ async function main() {
     fail(`arduino_context failed: ${JSON.stringify(contextPayload)}`);
   }
 
+  // 7. prompts/list + prompts/get
+  const promptsResponse = await mcpRequest(token, sessionId, {
+    jsonrpc: '2.0',
+    id: 4,
+    method: 'prompts/list',
+  });
+  const prompts = parsePayload(promptsResponse).result?.prompts ?? [];
+  if (prompts.length >= 3) {
+    pass(`prompts/list returned ${prompts.length}: ${prompts.map((p) => p.name).join(', ')}`);
+  } else {
+    fail(`prompts/list returned ${prompts.length} prompts (expected >= 3)`);
+  }
+  const bringupResponse = await mcpRequest(token, sessionId, {
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'prompts/get',
+    params: { name: 'bringup', arguments: {} },
+  });
+  const bringup = parsePayload(bringupResponse).result;
+  if (bringup?.messages?.[0]?.content?.text?.includes('arduino_board')) {
+    pass('prompts/get bringup returns workflow messages');
+  } else {
+    fail(`prompts/get bringup unexpected: ${JSON.stringify(bringup).slice(0, 200)}`);
+  }
+
+  // 8. search_tools finds the new serial capabilities (router mode only)
+  if (isRouter) {
+    const searchResponse = await mcpRequest(token, sessionId, {
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'tools/call',
+      params: { name: 'search_tools', arguments: { query: 'wait_for' } },
+    });
+    const searchText =
+      parsePayload(searchResponse).result?.content?.[0]?.text ?? '';
+    if (searchText.includes('arduino_serial')) {
+      pass('search_tools "wait_for" surfaces arduino_serial');
+    } else {
+      fail('search_tools "wait_for" did not surface arduino_serial');
+    }
+  }
+
+  // 9. Bridge parity: its locally-answered initialize must carry the same
+  // instructions the HTTP server sends (drift guard for the embedded copy).
+  try {
+    const bridgeInstructions = await bridgeInitializeInstructions();
+    if (bridgeInstructions === serverInstructions) {
+      pass('bridge initialize.instructions matches the server');
+    } else {
+      fail(
+        `bridge instructions drift: bridge ${bridgeInstructions.length} chars vs server ${serverInstructions.length} chars`
+      );
+    }
+  } catch (err) {
+    fail(`bridge parity check failed to run: ${err.message}`);
+  }
+
   console.log();
   if (failures) {
     fail(`${failures} check(s) failed`);
     process.exit(1);
   }
   pass('All checks passed');
+}
+
+/** Spawns the stdio bridge, sends initialize, returns its instructions. */
+function bridgeInitializeInstructions() {
+  const { spawn } = require('child_process');
+  const path = require('path');
+  const bridgePath = path.join(__dirname, '..', '..', 'bridge', 'arduino-agent-bridge.js');
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bridgePath], {
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('bridge did not answer initialize within 10s'));
+    }, 10000);
+    let buffer = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      buffer += chunk;
+      const nl = buffer.indexOf('\n');
+      if (nl === -1) return;
+      clearTimeout(timer);
+      child.kill();
+      try {
+        const msg = JSON.parse(buffer.slice(0, nl));
+        resolve(msg.result?.instructions ?? '');
+      } catch (err) {
+        reject(err);
+      }
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.stdin.write(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'smoke-test', version: '1.0.0' },
+        },
+      }) + '\n'
+    );
+  });
 }
 
 main().catch((err) => {
