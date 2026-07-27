@@ -37,7 +37,8 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     name: 'build',
     description: 'Compile sketches, upload to boards, check build output and errors.',
     toolNames: ['arduino_compile', 'arduino_upload', 'arduino_build_output', 'arduino_task_status'],
-    useWhen: 'Building, uploading, checking compilation errors, monitoring async tasks',
+    useWhen:
+      'Building, uploading, checking compilation errors. Pass wait:true to compile/upload to block until done instead of polling task status',
   },
   {
     name: 'board',

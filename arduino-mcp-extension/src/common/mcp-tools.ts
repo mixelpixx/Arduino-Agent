@@ -110,7 +110,7 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
   {
     name: 'arduino_compile',
     description:
-      'Compile a sketch. Returns immediately with a task ID; use arduino_task_status to check progress and get results, and arduino_build_output for the compiler output. Compiles the sketch open in the IDE unless sketch_path is given; uses the board selected in the IDE unless fqbn is given.',
+      'Compile a sketch. Recommended: pass wait:true to block until the build finishes and get the result in one call. Without wait it returns a task ID immediately; use arduino_task_status to poll and arduino_build_output for the compiler output. Compiles the sketch open in the IDE unless sketch_path is given; uses the board selected in the IDE unless fqbn is given.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -128,6 +128,16 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
           type: 'boolean',
           description: 'Show verbose compilation output (default: false)',
         },
+        wait: {
+          type: 'boolean',
+          description:
+            'Block until the build finishes or timeout_seconds elapses (default: false). On timeout you get the taskId and current progress back - not an error - and can keep waiting with arduino_task_status wait:true.',
+        },
+        timeout_seconds: {
+          type: 'number',
+          description:
+            'Max seconds to block when wait=true (default 60, clamp 5-600). Keep below your MCP client per-call timeout; a first build for a new core can take 2-3 minutes.',
+        },
       },
     },
     annotations: {
@@ -141,7 +151,7 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
   {
     name: 'arduino_upload',
     description:
-      '[CAUTION] Compile and upload a sketch to an Arduino board. This OVERWRITES the firmware on the device. Returns a task ID for progress tracking via arduino_task_status.',
+      '[CAUTION] Compile and upload a sketch to an Arduino board. This OVERWRITES the firmware on the device. Recommended: pass wait:true to block until the flash finishes. Without wait it returns a task ID for progress tracking via arduino_task_status.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -163,6 +173,16 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
         verify: {
           type: 'boolean',
           description: 'Verify upload after completion (default: true)',
+        },
+        wait: {
+          type: 'boolean',
+          description:
+            'Block until compile+flash finishes or timeout_seconds elapses (default: false). A timeout returns current progress, not an error.',
+        },
+        timeout_seconds: {
+          type: 'number',
+          description:
+            'Max seconds to block when wait=true (default 60, clamp 5-600).',
         },
       },
     },
@@ -372,13 +392,23 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
   {
     name: 'arduino_task_status',
     description:
-      'Check status of async operations (compile, upload). Returns pending/running/completed/failed status, progress, and result.',
+      'Check status of async operations (compile, upload). Returns pending/running/completed/failed status, progress, and result. Pass wait:true to block until the task finishes instead of polling.',
     inputSchema: {
       type: 'object',
       properties: {
         task_id: {
           type: 'string',
           description: 'Task ID returned from arduino_compile or arduino_upload',
+        },
+        wait: {
+          type: 'boolean',
+          description:
+            'Block until the task reaches a terminal status or timeout_seconds elapses (default: false). A timeout returns current progress with timed_out:true - just call again to keep waiting.',
+        },
+        timeout_seconds: {
+          type: 'number',
+          description:
+            'Max seconds to block when wait=true (default 60, clamp 5-600).',
         },
       },
       required: ['task_id'],

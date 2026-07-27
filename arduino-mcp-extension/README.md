@@ -328,8 +328,13 @@ requires the bearer token (unless `arduino.mcp.requireAuth` is disabled).
 | `sketch_path` | Path to sketch (defaults to current) |
 | `fqbn` | Fully Qualified Board Name |
 | `verbose` | Enable verbose output |
+| `wait` | Block until the build finishes (recommended) |
+| `timeout_seconds` | Max seconds to block when `wait=true` (default 60, clamp 5-600) |
 
-Returns a task ID. Use `arduino_task_status` to monitor progress.
+With `wait:true` the call returns the final result in one shot; if the timeout
+elapses first you get the current progress plus `timed_out: true` (not an
+error) and can keep waiting with `arduino_task_status {wait:true}`. Without
+`wait` it returns a task ID immediately.
 
 ### arduino_upload
 
@@ -339,6 +344,8 @@ Returns a task ID. Use `arduino_task_status` to monitor progress.
 | `fqbn` | Fully Qualified Board Name |
 | `port` | Serial port (e.g., /dev/ttyUSB0, COM3) |
 | `verify` | Verify after upload |
+| `wait` | Block until compile+flash finishes (recommended) |
+| `timeout_seconds` | Max seconds to block when `wait=true` |
 
 **Note:** This operation overwrites firmware on the target device.
 
@@ -402,6 +409,8 @@ Returns current IDE state including:
 | Parameter | Description |
 |-----------|-------------|
 | `task_id` | Task ID from compile or upload operation |
+| `wait` | Block until the task reaches a terminal status |
+| `timeout_seconds` | Max seconds to block when `wait=true` |
 
 Returns task status: `pending`, `running`, `completed`, `failed`, or `cancelled`.
 

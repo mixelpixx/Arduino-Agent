@@ -21,6 +21,12 @@ export interface Task {
   error?: string;
   progress?: number;
   progressMessage?: string;
+  /** Date.now() when the task was created. */
+  createdAt: number;
+  /** Date.now() when the runner started executing. */
+  startedAt?: number;
+  /** Date.now() when the task reached a terminal status. */
+  finishedAt?: number;
 }
 
 /**
