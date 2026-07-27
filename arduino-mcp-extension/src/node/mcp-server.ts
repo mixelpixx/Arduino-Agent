@@ -91,6 +91,22 @@ function clampTaskTimeout(value: unknown): number {
   );
 }
 
+// Serial wait_for holds an MCP request open, so its ceiling is deliberately
+// lower than task waits - long serial vigils should be re-issued.
+const SERIAL_WAIT_DEFAULT_SECONDS = 30;
+const SERIAL_WAIT_MIN_SECONDS = 1;
+const SERIAL_WAIT_MAX_SECONDS = 120;
+
+function clampSerialWaitTimeout(value: unknown): number {
+  if (typeof value !== 'number' || !isFinite(value)) {
+    return SERIAL_WAIT_DEFAULT_SECONDS;
+  }
+  return Math.min(
+    SERIAL_WAIT_MAX_SECONDS,
+    Math.max(SERIAL_WAIT_MIN_SECONDS, value)
+  );
+}
+
 interface StructuredBuildError {
   message: string;
   file?: string;
@@ -1317,7 +1333,25 @@ export class ArduinoMCPServer {
 
           case 'read': {
             const maxLines = (args.max_lines as number) || 100;
-            return this.serial.read(maxLines);
+            const since =
+              typeof args.since === 'number' ? args.since : undefined;
+            return this.serial.read(maxLines, since);
+          }
+
+          case 'wait_for': {
+            const pattern = args.pattern as string;
+            if (!pattern) {
+              throw new Error('pattern is required for wait_for');
+            }
+            const timeout = clampSerialWaitTimeout(args.timeout_seconds);
+            const since =
+              typeof args.since === 'number' ? args.since : undefined;
+            return this.serial.waitFor(
+              pattern,
+              (args.is_regex as boolean) || false,
+              timeout,
+              since
+            );
           }
 
           case 'write': {
