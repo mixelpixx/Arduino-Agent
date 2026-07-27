@@ -446,6 +446,31 @@ Returns current IDE state including:
 
 Returns task status: `pending`, `running`, `completed`, `failed`, or `cancelled`.
 
+## Guidance for agents
+
+The server teaches connected agents how to use it:
+
+- **Instructions at initialize** — every MCP client receives ~30 lines of
+  workflow guidance (explicit FQBNs for unidentifiable boards, `wait:true`,
+  cursor-based serial, crash events, BOOT-button recovery). Source:
+  `src/common/mcp-instructions.ts`; the stdio bridge serves an identical copy
+  when the IDE is closed (parity asserted by the smoke test).
+- **MCP prompts** — `bringup`, `debug-serial`, `profile-board`; Claude Code
+  surfaces them as slash commands.
+- **Claude Code skill** — richer judgment (port choice, CDCOnBoot, watchdog
+  rules, Wokwi simulation): [`skills/arduino-agent/`](../skills/arduino-agent/).
+
+Deliberately **not** shipped: client-side hooks and custom subagents. The
+instructions + prompts + skill cover the same ground without imposing
+configuration on users; revisit only if a concrete need appears.
+
+## Roadmap
+
+- **v0.7 — pin-safety preflight**: validate pin choices against the target
+  board (existence, input-only pins, strapping pins, PWM/I2C conflicts)
+  before upload. Needs a real per-board pin database to be more than theater,
+  which is why it did not ship in v0.6.
+
 ## Environment Variables
 
 Environment variables override the IDE preferences:

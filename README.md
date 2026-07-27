@@ -93,6 +93,12 @@ Unzip and run `Arduino IDE` (`Arduino IDE.exe` on Windows). Older builds are on 
    > and no dependencies. See [the bridge README](arduino-mcp-extension/bridge/README.md)
    > for auto-launch and other options.
 
+   > **Claude Code users:** the server sends workflow guidance automatically,
+   > and ships three slash commands (`/bringup`, `/debug-serial`,
+   > `/profile-board`). For deeper hardware know-how, install the bundled
+   > skill: copy [`skills/arduino-agent/`](skills/arduino-agent/) into
+   > `~/.claude/skills/`.
+
 3. **Talk to your board.**
    - *"Create a Blink sketch and open it."*
    - *"What boards are connected?"*
