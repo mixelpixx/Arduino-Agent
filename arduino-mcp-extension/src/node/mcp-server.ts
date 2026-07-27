@@ -36,6 +36,8 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -44,6 +46,8 @@ import {
   SERIAL_BAUD_RATES,
   ToolDefinition,
 } from '../common/mcp-tools';
+import { MCP_SERVER_INSTRUCTIONS } from '../common/mcp-instructions';
+import { MCP_PROMPTS, findPrompt } from '../common/mcp-prompts';
 import { Task } from '../common/mcp-types';
 import {
   MCPStatus,
@@ -801,7 +805,11 @@ export class ArduinoMCPServer {
   private createMCPServerInstance(): Server {
     const server = new Server(
       { name: 'arduino-ide-mcp', version: EXTENSION_VERSION },
-      { capabilities: { tools: {} } }
+      {
+        capabilities: { tools: {}, prompts: {} },
+        // Workflow guidance delivered to every client at initialize.
+        instructions: MCP_SERVER_INSTRUCTIONS,
+      }
     );
 
     const toTool = (tool: ToolDefinition): Tool => ({
@@ -815,6 +823,31 @@ export class ArduinoMCPServer {
       mcpLog.debug('tools/list requested');
       const tools = this.useRouterMode ? ROUTER_TOOLS : ARDUINO_TOOLS;
       return { tools: tools.map(toTool) };
+    });
+
+    server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+      prompts: MCP_PROMPTS.map((p) => ({
+        name: p.name,
+        description: p.description,
+        arguments: p.arguments,
+      })),
+    }));
+
+    server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const prompt = findPrompt(request.params.name);
+      if (!prompt) {
+        throw new Error(`Unknown prompt: ${request.params.name}`);
+      }
+      const args = (request.params.arguments ?? {}) as Record<string, string>;
+      return {
+        description: prompt.description,
+        messages: [
+          {
+            role: 'user' as const,
+            content: { type: 'text' as const, text: prompt.build(args) },
+          },
+        ],
+      };
     });
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {

@@ -50,12 +50,62 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const PROTOCOL_VERSION = '2024-11-05';
-const BRIDGE_VERSION = '0.1.0';
+const BRIDGE_VERSION = '0.2.0';
 const ENDPOINT = process.env.ARDUINO_MCP_URL || 'http://127.0.0.1:3847/mcp';
 const TOKEN_FILE = path.join(os.homedir(), '.arduinoIDE', 'mcp-token');
 const DEBUG = process.env.ARDUINO_MCP_DEBUG === '1';
 // Don't respawn the IDE on every call while it is still starting up.
 const LAUNCH_COOLDOWN_MS = 60_000;
+
+/**
+ * Server instructions surfaced in the bridge's locally-answered initialize
+ * (the bridge must answer even when the IDE is closed). The compiled
+ * extension is the source of truth; the embedded string below is only the
+ * fallback for unbuilt checkouts.
+ *
+ * KEEP IN SYNC with src/common/mcp-instructions.ts - the manual smoke test
+ * compares the bridge's initialize.instructions with the HTTP server's.
+ */
+const FALLBACK_INSTRUCTIONS = `Arduino Agent - an Arduino IDE with this MCP server embedded. You share one editor, one board and one serial monitor with the user; prefer these tools over asking the user to click in the IDE.
+
+Recommended workflow:
+1. arduino_context for current state (open sketch, selected board/port, connected boards with USB vid/pid).
+2. If the board shows identified:false, run arduino_board suggest_fqbn (uses USB identity + name matching; tells you which core to install if missing). ALWAYS pass an explicit fqbn to compile/upload/serial connect for such boards - they can never be auto-identified.
+3. Write code with arduino_sketch (set_content writes to disk AND live-reloads the user's editor).
+4. Compile/upload with wait:true - one call returns the final result. A timed_out:true response is NOT an error: call arduino_task_status {task_id, wait:true} to keep waiting (first builds for a new core can take minutes).
+5. arduino_upload compiles first automatically - no separate compile needed.
+6. After upload, connect serial at the baud rate in the sketch's Serial.begin(). Reads are cursor-based: keep the returned cursor and pass it as since to page output losslessly. Use wait_for {pattern} to block until expected output arrives.
+7. Crash/reset detection is automatic: read/wait_for responses carry events (reset/panic/watchdog/brownout/abort, with reset reasons and backtraces). A crash ends a pending wait_for early. "No output" plus reset events means the board is crash-looping, not quiet.
+
+Failure handling:
+- Failed compile/upload tasks carry result.explained - read it before retrying; it names the cause and the fix (port busy, bootloader mode, wrong FQBN, power).
+- Native-USB boards (ESP32-S2/S3/C3) re-enumerate after reset: the port can change or vanish; re-run arduino_board list_connected. Uploads are far more reliable via a board's UART/bridge port; native-USB uploads can require holding BOOT while pressing RESET.
+- Serial port busy on upload usually means this server's own monitor is connected: arduino_serial disconnect first.
+
+Firmware rules of thumb:
+- Never busy-loop without delay()/vTaskDelay() on ESP32 - a starved idle task trips the task watchdog and reboots the chip.
+- Serial.begin(115200) is the conventional rate; after flashing over native USB, wait ~1s for CDC re-enumeration before expecting output.`;
+
+function loadInstructions() {
+  try {
+    // Prefer the compiled extension next to this file (source of truth).
+    // eslint-disable-next-line global-require
+    const mod = require(path.join(
+      __dirname,
+      '..',
+      'lib',
+      'common',
+      'mcp-instructions'
+    ));
+    if (mod && typeof mod.MCP_SERVER_INSTRUCTIONS === 'string') {
+      return mod.MCP_SERVER_INSTRUCTIONS;
+    }
+  } catch {
+    // Unbuilt checkout - use the embedded copy.
+  }
+  return FALLBACK_INSTRUCTIONS;
+}
+const INSTRUCTIONS = loadInstructions();
 
 function log(...args) {
   if (DEBUG) console.error('[arduino-bridge]', ...args);
@@ -276,8 +326,9 @@ async function handle(msg) {
   if (method === 'initialize') {
     respond(id, {
       protocolVersion: params?.protocolVersion || PROTOCOL_VERSION,
-      capabilities: { tools: { listChanged: true } },
+      capabilities: { tools: { listChanged: true }, prompts: {} },
       serverInfo: { name: 'arduino-agent-bridge', version: BRIDGE_VERSION },
+      instructions: INSTRUCTIONS,
     });
     // Warm the upstream session in the background; ignore failures.
     upstream.ensureSession().catch(() => undefined);
@@ -329,6 +380,9 @@ async function handle(msg) {
     }
     if (method === 'resources/list') return respond(id, { resources: [] });
     if (method === 'prompts/list') return respond(id, { prompts: [] });
+    if (method === 'prompts/get') {
+      return respondError(id, -32601, offlineMessage());
+    }
     return respondError(id, -32603, offlineMessage());
   }
 }
