@@ -72,6 +72,27 @@ Unzip and run `Arduino IDE` (`Arduino IDE.exe` on Windows). Older builds are on 
    }
    ```
 
+   > **Tip — avoid "server failed to connect" when the IDE is closed.** The MCP
+   > server lives *inside* the IDE, so a direct HTTP connection fails whenever
+   > the IDE isn't running. Use the bundled stdio bridge instead and the server
+   > always connects, reporting "Arduino Agent is not running" only when you
+   > actually call a tool — and recovering by itself once you launch the IDE:
+   >
+   > ```json
+   > {
+   >   "mcpServers": {
+   >     "arduino": {
+   >       "command": "node",
+   >       "args": ["/path/to/arduino-mcp-extension/bridge/arduino-agent-bridge.js"]
+   >     }
+   >   }
+   > }
+   > ```
+   >
+   > It needs no token configuration (it reads `~/.arduinoIDE/mcp-token` itself)
+   > and no dependencies. See [the bridge README](arduino-mcp-extension/bridge/README.md)
+   > for auto-launch and other options.
+
 3. **Talk to your board.**
    - *"Create a Blink sketch and open it."*
    - *"What boards are connected?"*
