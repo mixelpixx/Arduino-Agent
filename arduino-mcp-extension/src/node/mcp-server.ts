@@ -1334,7 +1334,10 @@ export class ArduinoMCPServer {
                 )}`
               );
             }
-            return { success: true, ...this.serial.setBaudRate(newBaudRate) };
+            return {
+              success: true,
+              ...(await this.serial.setBaudRate(newBaudRate)),
+            };
           }
 
           default:
@@ -1704,6 +1707,7 @@ export class ArduinoMCPServer {
     task.status = 'running';
     task.progress = 0;
     task.progressMessage = 'Preparing upload...';
+    let compileFailed = false;
 
     const services = this.services;
     services.responseService.reset();
@@ -1740,7 +1744,30 @@ export class ArduinoMCPServer {
         // fall back to serial
       }
 
-      task.progressMessage = 'Compiling and uploading...';
+      // Compile first. `coreService.upload` only flashes an existing build, so
+      // uploading a sketch that was never compiled failed with the unhelpful
+      // "Compiled sketch not found in <hash dir>" - and this tool documents
+      // itself as "compile and upload". The IDE's own Upload command works the
+      // same way (verify-sketch, then upload). Compilation is incremental, so
+      // re-running it for an already-built sketch is cheap.
+      task.progressMessage = 'Compiling...';
+      try {
+        await services.coreService.compile({
+          sketch,
+          fqbn,
+          verbose: false,
+          optimizeForDebug: false,
+          sourceOverride: {},
+          progressId: task.id,
+        });
+      } catch (e) {
+        // Name the phase: "Upload failed: <compiler diagnostic>" would send the
+        // caller looking at the board and the cable instead of their code.
+        compileFailed = true;
+        throw e;
+      }
+
+      task.progressMessage = 'Uploading...';
       const result = await services.coreService.upload({
         sketch,
         fqbn,
@@ -1762,7 +1789,9 @@ export class ArduinoMCPServer {
     } catch (e) {
       task.status = 'failed';
       const errors = this.structuredErrorsOf(e);
-      task.error = `Upload failed: ${e instanceof Error ? e.message : e}`;
+      task.error = `${
+        compileFailed ? 'Upload failed during compilation' : 'Upload failed'
+      }: ${e instanceof Error ? e.message : e}`;
       task.result = { success: false, errors };
       this.recordBuild('upload', errors);
     } finally {
