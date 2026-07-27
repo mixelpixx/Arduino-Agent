@@ -237,6 +237,126 @@ const UPLOAD_ERROR_PATTERNS: ErrorExplanation[] = [
   },
 ];
 
+interface UsbVidFamily {
+  vendor: string;
+  /** native = the MCU itself is on USB; bridge = a USB-UART adapter chip. */
+  kind: 'native' | 'bridge';
+  hint: string;
+  /** For native vendors: plausible FQBNs when nothing else identifies the board. */
+  fqbnCandidates?: Array<{ fqbn: string; name: string }>;
+}
+
+/**
+ * Well-known USB vendor IDs (lowercase hex, no 0x). A bridge VID identifies
+ * the adapter chip, NOT the microcontroller - a CH340 tells you nothing about
+ * which board is behind it. Many boards (e.g. most ESP32-S3 devkits) expose
+ * USB PIDs that appear in no boards.txt, so they can NEVER be auto-identified;
+ * this table lets suggest_fqbn escape that dead end.
+ */
+const USB_VID_FAMILIES: Record<string, UsbVidFamily> = {
+  '303a': {
+    vendor: 'Espressif',
+    kind: 'native',
+    hint: 'Native USB on an ESP32-S2/S3/C3/C6-class chip. The USB PID alone cannot distinguish the variant - check the product name or silkscreen.',
+    fqbnCandidates: [
+      { fqbn: 'esp32:esp32:esp32s3', name: 'ESP32S3 Dev Module' },
+      { fqbn: 'esp32:esp32:esp32s2', name: 'ESP32S2 Dev Module' },
+      { fqbn: 'esp32:esp32:esp32c3', name: 'ESP32C3 Dev Module' },
+      { fqbn: 'esp32:esp32:esp32c6', name: 'ESP32C6 Dev Module' },
+    ],
+  },
+  '2341': {
+    vendor: 'Arduino SA',
+    kind: 'native',
+    hint: 'Official Arduino board; the USB PID identifies the model, so arduino-cli usually auto-identifies it once the core is installed.',
+  },
+  '2e8a': {
+    vendor: 'Raspberry Pi',
+    kind: 'native',
+    hint: 'RP2040/RP2350-class board (e.g. Pico) on native USB.',
+    fqbnCandidates: [
+      { fqbn: 'rp2040:rp2040:rpipico', name: 'Raspberry Pi Pico' },
+      { fqbn: 'arduino:mbed_rp2040:pico', name: 'Raspberry Pi Pico (Arduino Mbed OS)' },
+    ],
+  },
+  '1a86': {
+    vendor: 'WCH',
+    kind: 'bridge',
+    hint: 'CH34x USB-UART bridge - identifies the adapter, not the MCU. Common on ESP32/ESP8266/AVR clone boards; identify the board by name instead.',
+  },
+  '10c4': {
+    vendor: 'Silicon Labs',
+    kind: 'bridge',
+    hint: 'CP210x USB-UART bridge - identifies the adapter, not the MCU. Very common on ESP32 devkits.',
+  },
+  '0403': {
+    vendor: 'FTDI',
+    kind: 'bridge',
+    hint: 'FTDI USB-UART bridge - identifies the adapter, not the MCU.',
+  },
+};
+
+/** Lowercased alphanumeric tokens for fuzzy board-name matching. */
+function nameTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * Filler words in board names that should not count against a match:
+ * "ESP32S3 Dev Module" is the generic board for a bare "esp32 s3" query and
+ * must not lose to "ESP32-S3-Box" just because "Box" is one token shorter.
+ */
+const GENERIC_NAME_TOKENS = new Set([
+  'dev',
+  'module',
+  'board',
+  'devkit',
+  'devkitc',
+  'kit',
+  'generic',
+]);
+
+/**
+ * 0..1 similarity between a query and a candidate board name. Token overlap
+ * with fused-token handling ("esp32 s3" matches the single token "esp32s3"),
+ * then a small penalty per distinctive extra token so specialized boards rank
+ * below the generic one for a generic query.
+ */
+function scoreNameMatch(query: string, candidate: string): number {
+  const queryTokens = nameTokens(query);
+  if (!queryTokens.length) {
+    return 0;
+  }
+  const candidateTokens = nameTokens(candidate);
+  const candidateSet = new Set(candidateTokens);
+  const queryJoined = queryTokens.join('');
+
+  let hits = 0;
+  for (const token of queryTokens) {
+    if (candidateSet.has(token)) {
+      hits++;
+    }
+  }
+  let base = hits / queryTokens.length;
+  if (base < 1 && candidateSet.has(queryJoined)) {
+    base = 1; // whole query fused into one candidate token
+  }
+  if (base < 1 && candidateTokens.join('').includes(queryJoined)) {
+    base = Math.max(base, 0.95);
+  }
+
+  const extras = candidateTokens.filter(
+    (t) =>
+      !GENERIC_NAME_TOKENS.has(t) &&
+      !queryTokens.includes(t) &&
+      !queryJoined.includes(t)
+  ).length;
+  return Math.max(0, base - 0.03 * extras);
+}
+
 interface BuildRecord {
   tool: 'compile' | 'upload';
   stdout: string;
@@ -1301,6 +1421,7 @@ export class ArduinoMCPServer {
             // agent can still select the port and supply an explicit FQBN.
             const boards = (Object.values(detectedPorts) as any[]).map((dp) => {
               const board = dp.boards && dp.boards.length > 0 ? dp.boards[0] : undefined;
+              const props = dp.port.properties ?? {};
               return {
                 name: board?.name ?? 'Unknown',
                 fqbn: board?.fqbn ?? null,
@@ -1308,6 +1429,11 @@ export class ArduinoMCPServer {
                 port: {
                   address: dp.port.address,
                   protocol: dp.port.protocol,
+                  // USB identity: lets an agent reason about unidentified
+                  // boards (suggest_fqbn consumes the same data).
+                  vid: props['vid'] ?? null,
+                  pid: props['pid'] ?? null,
+                  serial_number: props['serialNumber'] ?? null,
                 },
               };
             });
@@ -1391,6 +1517,12 @@ export class ArduinoMCPServer {
             };
           }
 
+          case 'suggest_fqbn':
+            return this.suggestFqbn(
+              args.name as string | undefined,
+              args.port as string | undefined
+            );
+
           case 'install_core': {
             const core = args.core as string;
             if (!core) throw new Error('core is required (e.g. arduino:avr)');
@@ -1423,6 +1555,8 @@ export class ArduinoMCPServer {
               (dp) => ({
                 address: dp.port.address,
                 protocol: dp.port.protocol,
+                vid: dp.port.properties?.['vid'] ?? null,
+                pid: dp.port.properties?.['pid'] ?? null,
                 boards:
                   dp.boards?.map((b: any) => ({
                     name: b.name,
@@ -1732,11 +1866,14 @@ export class ArduinoMCPServer {
           // list_connected. Hiding them made a plugged-in device invisible.
           connectedBoards = (Object.values(detectedPorts) as any[]).map((dp) => {
             const board = dp.boards && dp.boards.length > 0 ? dp.boards[0] : undefined;
+            const props = dp.port.properties ?? {};
             return {
               name: board?.name ?? 'Unknown',
               fqbn: board?.fqbn,
               identified: !!board,
               port: dp.port.address,
+              vid: props['vid'] ?? null,
+              pid: props['pid'] ?? null,
             };
           });
         } catch (e) {
@@ -2266,6 +2403,181 @@ export class ArduinoMCPServer {
       ReadASCIIString: 'Parse integers from a comma-separated serial string',
     };
     return descriptions[name];
+  }
+
+  /**
+   * Suggests FQBNs for a board that arduino-cli cannot identify - the common
+   * dead end where a port shows identified:false because the board's USB
+   * VID/PID appears in no boards.txt (most ESP32-S3 devkits) or it sits
+   * behind a generic USB-UART bridge. Uses the port's USB identity plus fuzzy
+   * name matching over installed and searchable boards; when the best match's
+   * core is missing, names the core to install.
+   */
+  private async suggestFqbn(name?: string, port?: string): Promise<unknown> {
+    const boardsService = this.services.boardsService;
+
+    // Explicit port > session selection > IDE selection. Name-only is fine.
+    const portAddress =
+      port ?? this.sessionBoard.port ?? this.ideState.portAddress ?? undefined;
+
+    let portInfo: Record<string, unknown> | null = null;
+    let detectedName: string | undefined;
+    let family: UsbVidFamily | undefined;
+    if (portAddress) {
+      const detectedPorts = await boardsService.getDetectedPorts();
+      const entry = (Object.values(detectedPorts) as any[]).find(
+        (dp) => dp.port.address === portAddress
+      );
+      if (entry) {
+        const props = entry.port.properties ?? {};
+        const vid: string | undefined = props['vid'];
+        const pid: string | undefined = props['pid'];
+        const vidKey = vid?.replace(/^0x/i, '').toLowerCase();
+        family = vidKey ? USB_VID_FAMILIES[vidKey] : undefined;
+        detectedName = entry.boards?.[0]?.name;
+        portInfo = {
+          address: portAddress,
+          vid: vid ?? null,
+          pid: pid ?? null,
+          vendor: family?.vendor ?? null,
+          kind: family?.kind ?? null,
+          hint: family?.hint ?? null,
+        };
+      } else {
+        portInfo = {
+          address: portAddress,
+          error: 'Port not currently detected',
+        };
+      }
+    }
+
+    if (!name && !detectedName && !family) {
+      throw new Error(
+        'Nothing to go on: pass a board name (e.g. "esp32 s3") and/or a port with a connected board.'
+      );
+    }
+
+    const installed = (await boardsService.getInstalledBoards()) as any[];
+    const installedFqbns = new Set(
+      installed.map((b) => b.fqbn).filter(Boolean)
+    );
+
+    interface Candidate {
+      name: string;
+      /** null when the platform is not installed - arduino-cli only reveals
+       *  FQBNs for installed platforms; install `core` to get it. */
+      fqbn: string | null;
+      installed: boolean;
+      score: number;
+      reason: string;
+      /** Platform id to install (first two FQBN segments), when known. */
+      core?: string;
+      packageName?: string;
+    }
+    const candidates: Candidate[] = [];
+    const seen = new Set<string>();
+    const push = (c: Candidate) => {
+      const key = c.fqbn ?? `${c.name}|${c.core ?? c.packageName ?? ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        candidates.push(c);
+      }
+    };
+
+    const searchName = name ?? detectedName;
+    if (searchName) {
+      for (const b of installed) {
+        if (!b.fqbn) continue;
+        const score = scoreNameMatch(searchName, b.name ?? '');
+        if (score >= 0.4) {
+          push({
+            name: b.name,
+            fqbn: b.fqbn,
+            installed: true,
+            score,
+            reason: `name match, core installed`,
+            core: b.fqbn.split(':').slice(0, 2).join(':'),
+            packageName: b.packageName,
+          });
+        }
+      }
+      try {
+        const results = (await boardsService.searchBoards({
+          query: searchName,
+        })) as any[];
+        for (const b of results) {
+          const score = scoreNameMatch(searchName, b.name ?? '');
+          if (score < 0.4) continue;
+          // Skip deprecated platforms; their replacement is its own row.
+          if (/\[DEPRECATED/i.test(b.packageName ?? '')) continue;
+          const fqbn: string | null = b.fqbn || null;
+          push({
+            name: b.name,
+            fqbn,
+            installed: fqbn ? installedFqbns.has(fqbn) : false,
+            // Nudge below an installed twin so it sorts after it.
+            score: score - 0.01,
+            reason: fqbn
+              ? `name match in board index`
+              : `name match - platform not installed, so arduino-cli hides its FQBN`,
+            core:
+              fqbn?.split(':').slice(0, 2).join(':') ??
+              (b.packageId?.vendorId && b.packageId?.arch
+                ? `${b.packageId.vendorId}:${b.packageId.arch}`
+                : undefined),
+            packageName: b.packageName,
+          });
+        }
+      } catch {
+        // Offline or index unavailable - installed boards still work.
+      }
+    }
+
+    if (family?.fqbnCandidates) {
+      for (const c of family.fqbnCandidates) {
+        push({
+          name: c.name,
+          fqbn: c.fqbn,
+          installed: installedFqbns.has(c.fqbn),
+          score: 0.5,
+          reason: `USB vendor ${family.vendor} (${family.kind} USB)`,
+          core: c.fqbn.split(':').slice(0, 2).join(':'),
+        });
+      }
+    }
+
+    candidates.sort(
+      (a, b) =>
+        b.score - a.score || Number(b.installed) - Number(a.installed)
+    );
+    const top = candidates.slice(0, 5);
+    const best = top[0];
+    const coreToInstall = best && !best.installed ? best.core ?? null : null;
+
+    let hint: string;
+    if (!best) {
+      hint =
+        'No confident match. Try a more specific name, or arduino_board search with the product name.';
+    } else if (best.installed && best.fqbn) {
+      hint = `Pass fqbn "${best.fqbn}" explicitly to compile/upload/serial connect, or set it for the session with arduino_board select.`;
+    } else if (coreToInstall) {
+      hint = `Best match "${best.name}" needs its core: arduino_board install_core {"core":"${coreToInstall}"}${
+        best.fqbn
+          ? `, then use fqbn "${best.fqbn}"`
+          : ', then re-run suggest_fqbn to get the exact FQBN'
+      }.`;
+    } else {
+      hint = `Best match "${best.name}" is in platform "${
+        best.packageName ?? 'unknown'
+      }", which is not installed and whose core id could not be determined. Install it via the IDE Boards Manager, then re-run suggest_fqbn.`;
+    }
+
+    return {
+      candidates: top,
+      port_info: portInfo,
+      core_to_install: coreToInstall,
+      hint,
+    };
   }
 
   private getBoardPinInfo(fqbn: string): {

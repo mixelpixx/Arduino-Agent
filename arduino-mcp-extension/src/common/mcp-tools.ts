@@ -226,7 +226,7 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
   {
     name: 'arduino_board',
     description:
-      'Manage Arduino boards - list connected devices, get the IDE board selection, choose a default board/port for this MCP session, get board details including pin capabilities, search boards, install cores.',
+      'Manage Arduino boards - list connected devices (with USB vid/pid), get the IDE board selection, choose a default board/port for this MCP session, get board details including pin capabilities, search boards, install cores. When a connected port shows identified:false, use suggest_fqbn to get FQBN candidates from the USB identity and board name.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -239,10 +239,11 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
             'get_selected',
             'get_info',
             'search',
+            'suggest_fqbn',
             'install_core',
           ],
           description:
-            'The board operation to perform. "select" sets the default board/port used by compile/upload for this MCP session (it does not change the IDE UI selection). "get_selected" returns the IDE selection and the MCP session override.',
+            'The board operation to perform. "select" sets the default board/port used by compile/upload for this MCP session (it does not change the IDE UI selection). "get_selected" returns the IDE selection and the MCP session override. "suggest_fqbn" proposes FQBNs for an unidentified board from its USB vid/pid and/or a name.',
         },
         fqbn: {
           type: 'string',
@@ -251,11 +252,17 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
         },
         port: {
           type: 'string',
-          description: 'Serial port to associate with the board (for select)',
+          description:
+            'Serial port to associate with the board (for select), or the port to identify (for suggest_fqbn; defaults to the selected port)',
         },
         query: {
           type: 'string',
           description: 'Search query (for search action)',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Board/product name to match, e.g. "esp32 s3" or the name on the silkscreen (for suggest_fqbn)',
         },
         core: {
           type: 'string',
