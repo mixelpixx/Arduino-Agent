@@ -319,7 +319,12 @@ requires the bearer token (unless `arduino.mcp.requireAuth` is disabled).
 | `get_info` | `fqbn` | Get board specs and pin reference |
 | `select` | `fqbn`, `port` | Set the default board/port for this MCP session (does not change the IDE UI) |
 | `search` | `query` | Search board registry |
+| `suggest_fqbn` | `name`, `port` | Propose FQBNs for an unidentified board from its USB vid/pid and/or name; names the core to install when missing |
 | `install_core` | `core` | Install board support package |
+
+`list_connected` includes each port's USB `vid`/`pid`/`serial_number`. A
+bridge-chip vid (CH34x/CP210x/FTDI) identifies the adapter, not the MCU -
+`suggest_fqbn` knows the difference and says so.
 
 ### arduino_compile
 

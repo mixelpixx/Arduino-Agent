@@ -44,7 +44,8 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     name: 'board',
     description: 'Manage Arduino boards - list connected, select board/port, install cores.',
     toolNames: ['arduino_board'],
-    useWhen: 'Connecting boards, selecting board type, installing board support',
+    useWhen:
+      'Connecting boards, selecting board type, installing board support, identifying unknown boards / picking an FQBN (suggest_fqbn)',
   },
   {
     name: 'serial',
