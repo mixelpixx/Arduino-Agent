@@ -1125,16 +1125,25 @@ export class ArduinoMCPServer {
         switch (action) {
           case 'list_connected': {
             const detectedPorts = await boardsService.getDetectedPorts();
-            const boards = (Object.values(detectedPorts) as any[])
-              .filter((dp) => dp.boards && dp.boards.length > 0)
-              .map((dp) => ({
-                name: dp.boards![0].name,
-                fqbn: dp.boards![0].fqbn,
+            // Report every detected port, not just the ones arduino-cli could
+            // match to a board. A port with no identified board is extremely
+            // common - the board's core isn't installed yet, it's a generic
+            // clone, or it's sitting in bootloader mode - and dropping those
+            // left the agent unable to see that anything was plugged in at all.
+            // Unidentified ports are returned with identified: false so the
+            // agent can still select the port and supply an explicit FQBN.
+            const boards = (Object.values(detectedPorts) as any[]).map((dp) => {
+              const board = dp.boards && dp.boards.length > 0 ? dp.boards[0] : undefined;
+              return {
+                name: board?.name ?? 'Unknown',
+                fqbn: board?.fqbn ?? null,
+                identified: !!board,
                 port: {
                   address: dp.port.address,
                   protocol: dp.port.protocol,
                 },
-              }));
+              };
+            });
             return { boards };
           }
 
@@ -1524,18 +1533,24 @@ export class ArduinoMCPServer {
         let connectedBoards: Array<{
           name: string;
           fqbn?: string;
+          identified: boolean;
           port: string;
         }> = [];
         try {
           const detectedPorts =
             await this.services.boardsService.getDetectedPorts();
-          connectedBoards = (Object.values(detectedPorts) as any[])
-            .filter((dp) => dp.boards && dp.boards.length > 0)
-            .map((dp) => ({
-              name: dp.boards![0].name,
-              fqbn: dp.boards![0].fqbn,
+          // Include ports with no identified board (core not installed, generic
+          // clone, bootloader mode) - see the note in arduino_board
+          // list_connected. Hiding them made a plugged-in device invisible.
+          connectedBoards = (Object.values(detectedPorts) as any[]).map((dp) => {
+            const board = dp.boards && dp.boards.length > 0 ? dp.boards[0] : undefined;
+            return {
+              name: board?.name ?? 'Unknown',
+              fqbn: board?.fqbn,
+              identified: !!board,
               port: dp.port.address,
-            }));
+            };
+          });
         } catch (e) {
           mcpLog.error('Error getting detected ports:', e);
         }
