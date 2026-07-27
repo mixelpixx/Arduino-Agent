@@ -197,12 +197,28 @@ documentation lives in
 
 ## Project status
 
-Actively developed. Verified working end-to-end: the MCP server and auth,
-IDE-state sync, sketch create/read/write with live editor reload, compile with
-real captured output, and all read-only tools. Upload and live serial are
-implemented and need a physical board to fully exercise. The Windows build is
-verified from source and installed; the macOS and Linux release builds are newer
-and still being hardened.
+Actively developed, and **verified against real hardware** — an ESP32-S3
+(N16R8) driven end to end through the MCP tools alone:
+
+> install the board core → create a sketch → write the code → compile →
+> upload → read the board's own serial output
+
+Every step ran as an MCP call, with no manual work in the IDE. In one pass the
+agent wrote a WiFi scanner, flashed it, and read 21 access points back off the
+board.
+
+That session is also where the current release's fixes came from — uploading a
+never-compiled sketch, serial baud rates silently not applying, and boards
+whose core isn't installed being invisible to the agent were all found by
+driving a physical board, not by reading code.
+
+Release builds for **Windows, macOS and Linux** are produced by CI and attached
+to every tagged release.
+
+**Known limits:** artifacts are unsigned. Boards whose USB VID/PID appear in no
+`boards.txt` (many ESP32-S3 devkits) can't be auto-identified — pass an explicit
+FQBN. Uploading over a board's *native* USB port can require manual bootloader
+entry; a UART bridge port works without it.
 
 Contributions and bug reports are welcome via
 [Issues](https://github.com/mixelpixx/arduino-mcp/issues) and pull requests.
