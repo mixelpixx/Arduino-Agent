@@ -47,7 +47,14 @@ export class MCPSerialManager {
     portAddress: string,
     baudRate: number,
     fqbnOverride?: string
-  ): Promise<{ port: string; baudRate: number; board: string; fqbn: string }> {
+  ): Promise<{
+    port: string;
+    baudRate: number;
+    board: string;
+    fqbn: string;
+    requestedBaudRate?: number;
+    warning?: string;
+  }> {
     if (this.connection?.connected) {
       if (this.connection.port.address === portAddress) {
         if (this.connection.baudRate === baudRate) {
@@ -121,7 +128,27 @@ export class MCPSerialManager {
     if (!this.connection?.connected) {
       throw new Error(`Failed to connect the monitor on ${portAddress}`);
     }
-    return this.statusForResult();
+
+    // The monitor announces its real settings over the websocket
+    // (ON_SETTINGS_DID_CHANGE) and we track that, so `baudRate` below is always
+    // the rate actually in use. It can differ from the one asked for: the IDE
+    // keeps its own monitor settings for a port and will override us. Say so
+    // rather than returning a different number with no explanation - a silently
+    // ignored baud rate reads as broken hardware.
+    const result = this.statusForResult();
+    if (result.baudRate !== baudRate) {
+      return {
+        ...result,
+        requestedBaudRate: baudRate,
+        warning:
+          `The monitor for ${portAddress} is running at ${result.baudRate} baud; ` +
+          `the requested ${baudRate} was not applied because the IDE keeps its own ` +
+          `setting for this port. Output will be unreadable unless the sketch also ` +
+          `uses ${result.baudRate} - change the rate in the IDE's Serial Monitor, ` +
+          `or match it in Serial.begin().`,
+      };
+    }
+    return result;
   }
 
   private openWebSocket(
