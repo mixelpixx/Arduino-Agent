@@ -114,6 +114,129 @@ interface StructuredBuildError {
   details?: string;
 }
 
+interface ErrorExplanation {
+  pattern: RegExp;
+  explanation: string;
+  suggestion: string;
+}
+
+/** Common compiler diagnostics with beginner-friendly explanations. */
+const COMPILE_ERROR_PATTERNS: ErrorExplanation[] = [
+  {
+    pattern: /was not declared in this scope/i,
+    explanation:
+      'The variable or function name is not recognized. It might be misspelled or not defined.',
+    suggestion:
+      'Check spelling. Make sure the variable is declared before use, or include the necessary library.',
+  },
+  {
+    pattern: /expected ';' before/i,
+    explanation: 'A semicolon is missing at the end of a statement.',
+    suggestion: 'Add a semicolon (;) at the end of the previous line.',
+  },
+  {
+    pattern: /expected '\)' before/i,
+    explanation: 'A closing parenthesis is missing.',
+    suggestion:
+      'Check that all opening parentheses ( have matching closing parentheses ).',
+  },
+  {
+    pattern: /'(\w+)' does not name a type/i,
+    explanation: "The compiler doesn't recognize this as a valid type.",
+    suggestion:
+      'Check spelling, or include the library that defines this type.',
+  },
+  {
+    pattern: /no matching function for call to/i,
+    explanation: 'The function is being called with wrong arguments.',
+    suggestion: 'Check the function documentation for correct parameter types.',
+  },
+  {
+    pattern: /undefined reference to/i,
+    explanation:
+      'A function or variable is declared but its implementation cannot be found.',
+    suggestion:
+      'Make sure the library that implements it is installed and included.',
+  },
+];
+
+/**
+ * esptool/avrdude/serial failure signatures. These messages are about
+ * hardware, ports and bootloaders - more confusing than compiler errors, and
+ * previously returned raw. Ordering matters: specific patterns first, the
+ * generic esptool "A fatal error occurred" last.
+ */
+const UPLOAD_ERROR_PATTERNS: ErrorExplanation[] = [
+  {
+    pattern: /Failed to connect to ESP32[^:]*: No serial data received/i,
+    explanation:
+      'esptool could not talk to the chip over this port - the chip never entered its download mode.',
+    suggestion:
+      'On boards with native USB (ESP32-S2/S3/C3), uploads are far more reliable over the UART/bridge port if the board has one. Otherwise hold BOOT, press and release RESET, release BOOT, then retry. Also confirm the port is the right one (arduino_board list_connected).',
+  },
+  {
+    pattern: /Wrong boot mode detected/i,
+    explanation:
+      'The chip is running its application instead of the serial bootloader.',
+    suggestion:
+      'Hold BOOT while pressing RESET to force download mode, then retry the upload.',
+  },
+  {
+    pattern: /This chip is (ESP32\S*),? not/i,
+    explanation:
+      'The selected board (FQBN) does not match the chip actually connected.',
+    suggestion:
+      'Pick the FQBN for the detected chip - arduino_board suggest_fqbn can identify it from the port.',
+  },
+  {
+    pattern:
+      /(could not open (?:port )?COM\d+|could not open port|Access is denied|Resource busy|port is busy|PermissionError)/i,
+    explanation:
+      'The serial port could not be opened - it is either in use by another program or does not exist.',
+    suggestion:
+      'Disconnect the serial monitor (arduino_serial disconnect) and close other apps using the port. If that does not help, re-run arduino_board list_connected to confirm the port name - native-USB boards re-enumerate after reset.',
+  },
+  {
+    pattern: /Permission denied.*(tty|dev\/)/i,
+    explanation: 'The current user is not allowed to open the serial device.',
+    suggestion:
+      'On Linux, add your user to the dialout group (sudo usermod -aG dialout $USER) and log in again.',
+  },
+  {
+    pattern:
+      /(no such file or directory.*(COM|tty)|port .*not found|could not find)/i,
+    explanation: 'The serial port does not exist (anymore).',
+    suggestion:
+      'Native-USB boards re-enumerate after reset and can change port. Re-run arduino_board list_connected and use the port it reports now.',
+  },
+  {
+    pattern: /avrdude.*(not in sync|stk500\w*_recv|programmer is not responding)/i,
+    explanation:
+      'The AVR bootloader did not answer - usually wrong port, wrong board selection, or the bootloader is not running.',
+    suggestion:
+      'Verify the port and FQBN. On boards without auto-reset, press RESET just as the upload starts.',
+  },
+  {
+    pattern: /Brownout/i,
+    explanation:
+      'The chip browned out - its supply voltage dipped during the operation.',
+    suggestion:
+      'Use a better USB cable/port or a powered hub; avoid powering heavy loads from the board while flashing.',
+  },
+  {
+    pattern: /Timed out waiting for packet/i,
+    explanation: 'The connection to the chip dropped mid-transfer.',
+    suggestion:
+      'Retry. If it persists, use a shorter/better USB cable and avoid hubs.',
+  },
+  {
+    pattern: /A fatal error occurred/i,
+    explanation: 'esptool aborted the flash operation.',
+    suggestion:
+      'Read the message after "A fatal error occurred:" - it names the specific failure. Check port, cable, and bootloader mode, then retry.',
+  },
+];
+
 interface BuildRecord {
   tool: 'compile' | 'upload';
   stdout: string;
@@ -1144,8 +1267,9 @@ export class ArduinoMCPServer {
           const errors = this.lastBuild.errors.length
             ? this.lastBuild.errors.map((e) => this.formatStructuredError(e))
             : this.extractErrors(this.lastBuild.stderr);
+          const tool = this.lastBuild.tool;
           return format === 'explained'
-            ? { errors: errors.map((e) => this.explainError(e)) }
+            ? { errors: errors.map((e) => this.explainError(e, tool)) }
             : { errors };
         }
         if (type === 'warnings') {
@@ -1823,11 +1947,36 @@ export class ArduinoMCPServer {
       task.error = `Compilation failed: ${
         e instanceof Error ? e.message : e
       }`;
-      task.result = { success: false, errors };
       this.recordBuild('compile', errors);
+      task.result = {
+        success: false,
+        errors,
+        explained: this.explainTaskFailure(task, errors, 'compile'),
+      };
     } finally {
       progressSub.dispose();
     }
+  }
+
+  /**
+   * Builds the `explained` entries attached to a failed task - the place
+   * agents actually look, rather than requiring a follow-up call to
+   * arduino_build_output. Falls back through structured errors, stderr
+   * extraction, and finally the task's own error string, so a failed task
+   * never carries an empty explanation.
+   */
+  private explainTaskFailure(
+    task: Task,
+    errors: StructuredBuildError[],
+    tool: 'compile' | 'upload'
+  ): Array<{ raw: string; explanation: string; suggestion: string }> {
+    let raw = errors.length
+      ? errors.map((err) => this.formatStructuredError(err))
+      : this.extractErrors(this.lastBuild?.stderr ?? '');
+    if (!raw.length && task.error) {
+      raw = [task.error];
+    }
+    return raw.map((r) => this.explainError(r, tool));
   }
 
   private async runUploadTask(task: Task): Promise<void> {
@@ -1922,8 +2071,16 @@ export class ArduinoMCPServer {
       task.error = `${
         compileFailed ? 'Upload failed during compilation' : 'Upload failed'
       }: ${e instanceof Error ? e.message : e}`;
-      task.result = { success: false, errors };
       this.recordBuild('upload', errors);
+      task.result = {
+        success: false,
+        errors,
+        explained: this.explainTaskFailure(
+          task,
+          errors,
+          compileFailed ? 'compile' : 'upload'
+        ),
+      };
     } finally {
       progressSub.dispose();
     }
@@ -1979,7 +2136,15 @@ export class ArduinoMCPServer {
   private extractErrors(stderr: string): string[] {
     const errors: string[] = [];
     for (const line of stderr.split('\n')) {
-      if (line.includes('error:')) {
+      // 'error:' catches compiler diagnostics; the alternation catches
+      // esptool/avrdude failures, which never use that prefix and previously
+      // made a failed upload report zero errors.
+      if (
+        line.includes('error:') ||
+        /A fatal error occurred|Failed uploading|Failed to connect|avrdude: /i.test(
+          line
+        )
+      ) {
         errors.push(line.trim());
       }
     }
@@ -1996,66 +2161,39 @@ export class ArduinoMCPServer {
     return warnings;
   }
 
-  private explainError(error: string): {
+  private explainError(
+    error: string,
+    tool: 'compile' | 'upload' = 'compile'
+  ): {
     raw: string;
     explanation: string;
     suggestion: string;
   } {
-    // Common Arduino error patterns with explanations
-    const patterns: Array<{
-      pattern: RegExp;
-      explanation: string;
-      suggestion: string;
-    }> = [
-      {
-        pattern: /was not declared in this scope/i,
-        explanation:
-          'The variable or function name is not recognized. It might be misspelled or not defined.',
-        suggestion:
-          'Check spelling. Make sure the variable is declared before use, or include the necessary library.',
-      },
-      {
-        pattern: /expected ';' before/i,
-        explanation: 'A semicolon is missing at the end of a statement.',
-        suggestion: 'Add a semicolon (;) at the end of the previous line.',
-      },
-      {
-        pattern: /expected '\)' before/i,
-        explanation: 'A closing parenthesis is missing.',
-        suggestion:
-          'Check that all opening parentheses ( have matching closing parentheses ).',
-      },
-      {
-        pattern: /'(\w+)' does not name a type/i,
-        explanation: "The compiler doesn't recognize this as a valid type.",
-        suggestion:
-          'Check spelling, or include the library that defines this type.',
-      },
-      {
-        pattern: /no matching function for call to/i,
-        explanation: 'The function is being called with wrong arguments.',
-        suggestion:
-          'Check the function documentation for correct parameter types.',
-      },
-      {
-        pattern: /undefined reference to/i,
-        explanation:
-          'A function or variable is declared but its implementation cannot be found.',
-        suggestion:
-          'Make sure the library that implements it is installed and included.',
-      },
-    ];
-
-    for (const { pattern, explanation, suggestion } of patterns) {
-      if (pattern.test(error)) {
-        return { raw: error, explanation, suggestion };
+    // Upload signatures are tried first for upload failures, but both tables
+    // are consulted: an upload that failed during its compile phase carries
+    // compiler diagnostics.
+    const tables =
+      tool === 'upload'
+        ? [UPLOAD_ERROR_PATTERNS, COMPILE_ERROR_PATTERNS]
+        : [COMPILE_ERROR_PATTERNS];
+    for (const table of tables) {
+      for (const { pattern, explanation, suggestion } of table) {
+        if (pattern.test(error)) {
+          return { raw: error, explanation, suggestion };
+        }
       }
     }
 
     return {
       raw: error,
-      explanation: 'Compilation error occurred.',
-      suggestion: 'Review the error message and check the indicated line.',
+      explanation:
+        tool === 'upload'
+          ? 'Upload/flashing error occurred.'
+          : 'Compilation error occurred.',
+      suggestion:
+        tool === 'upload'
+          ? 'Check the board is connected, the port is correct and not in use, and the FQBN matches the chip.'
+          : 'Review the error message and check the indicated line.',
     };
   }
 
