@@ -26,7 +26,52 @@ export const SUPPORTED_BAUD_RATES = [
 
 const MAX_BUFFER_CHARS = 512 * 1024; // cap the capture buffer at 512 KB
 
-/** Result shape for waitFor - see that method for the three resolutions. */
+/**
+ * A crash/reset signature detected in the board's output. Surfaced through
+ * read/wait_for/status so an agent can tell "the board rebooted five times"
+ * apart from "the board is quiet" - previously these looked identical.
+ */
+export interface SerialEvent {
+  type: 'reset' | 'panic' | 'watchdog' | 'brownout' | 'abort';
+  /** The line that triggered the detection. */
+  line: string;
+  /** Global cursor just past that line. */
+  cursor: number;
+  timestamp: number;
+  /** Reset reason, panic cause, or the first backtrace line. */
+  detail?: string;
+}
+
+const MAX_EVENTS = 50;
+
+/**
+ * Line-anchored signatures for the funnel scanner. Order matters: the first
+ * match wins. ESP32 (esp-idf) signatures plus the classic AVR wdt marker.
+ */
+const EVENT_SIGNATURES: Array<{
+  type: SerialEvent['type'];
+  pattern: RegExp;
+  detail?: (match: RegExpMatchArray) => string;
+}> = [
+  {
+    type: 'panic',
+    pattern: /Guru Meditation Error:?\s*(.*)/,
+    detail: (m) => m[1]?.trim() || 'panic',
+  },
+  { type: 'brownout', pattern: /Brownout detector was triggered/ },
+  { type: 'abort', pattern: /abort\(\) was called/ },
+  {
+    type: 'watchdog',
+    pattern: /Task watchdog got triggered|\bwdt reset/i,
+  },
+  {
+    type: 'reset',
+    pattern: /^rst:0x[0-9a-f]+\s*\(([^)]+)\)/i,
+    detail: (m) => m[1],
+  },
+];
+
+/** Result shape for waitFor - see that method for the resolutions. */
 export interface SerialWaitResult {
   matched: boolean;
   line?: string;
@@ -35,6 +80,9 @@ export interface SerialWaitResult {
   timed_out?: boolean;
   disconnected?: boolean;
   hint?: string;
+  /** Set when a crash/reset ended the wait early. */
+  event?: SerialEvent;
+  message?: string;
 }
 
 interface SerialWaiter {
@@ -63,6 +111,10 @@ interface ActiveConnection {
   lineRemainder: string;
   /** Pending wait_for calls, resolved by the line scanner. */
   waiters: SerialWaiter[];
+  /** Detected crash/reset events, oldest first, capped at MAX_EVENTS. */
+  events: SerialEvent[];
+  /** Last panic/abort event still waiting for its Backtrace line. */
+  crashPendingDetail: SerialEvent | null;
 }
 
 function escapeRegExp(text: string): string {
@@ -203,6 +255,8 @@ export class MCPSerialManager {
         bufferStartOffset: 0,
         lineRemainder: '',
         waiters: [],
+        events: [],
+        crashPendingDetail: null,
       };
 
       ws.on('open', () => {
@@ -283,6 +337,8 @@ export class MCPSerialManager {
     line: string,
     lineEndCursor: number
   ): void {
+    this.classifyLine(connection, line, lineEndCursor);
+
     if (!connection.waiters.length) {
       return;
     }
@@ -300,6 +356,70 @@ export class MCPSerialManager {
       connection.waiters = connection.waiters.filter(
         (w) => !matched.includes(w)
       );
+    }
+  }
+
+  /** Matches crash/reset signatures and records SerialEvents. */
+  private classifyLine(
+    connection: ActiveConnection,
+    line: string,
+    lineEndCursor: number
+  ): void {
+    // A panic/abort is followed by its backtrace a few lines later - attach it
+    // as detail instead of recording a separate event.
+    if (connection.crashPendingDetail && /^Backtrace:/.test(line)) {
+      connection.crashPendingDetail.detail = line;
+      connection.crashPendingDetail = null;
+      return;
+    }
+
+    for (const signature of EVENT_SIGNATURES) {
+      const match = line.match(signature.pattern);
+      if (!match) {
+        continue;
+      }
+      const event: SerialEvent = {
+        type: signature.type,
+        line,
+        cursor: lineEndCursor,
+        timestamp: Date.now(),
+        detail: signature.detail?.(match),
+      };
+      connection.events.push(event);
+      if (connection.events.length > MAX_EVENTS) {
+        connection.events.shift();
+      }
+      if (event.type === 'panic' || event.type === 'abort') {
+        connection.crashPendingDetail = event;
+      }
+      // Terminal events end pending waits early: the awaited output is not
+      // coming from a board that just crashed or rebooted. A watchdog warning
+      // can be transient (it does not always abort), so it only records.
+      if (event.type !== 'watchdog') {
+        this.resolveWaitersWithEvent(connection, event);
+      }
+      return; // first signature wins
+    }
+  }
+
+  private resolveWaitersWithEvent(
+    connection: ActiveConnection,
+    event: SerialEvent
+  ): void {
+    const waiters = connection.waiters;
+    connection.waiters = [];
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve({
+        matched: false,
+        event,
+        cursor: event.cursor,
+        message: `Board ${
+          event.type === 'reset' ? 'reset' : 'crashed'
+        } while waiting (${event.type}${
+          event.detail ? `: ${event.detail}` : ''
+        })`,
+      });
     }
   }
 
@@ -356,6 +476,7 @@ export class MCPSerialManager {
     cursor: number;
     dropped: number;
     has_more: boolean;
+    events: SerialEvent[];
   } {
     const connection = this.requireConnection();
     const end = connection.bufferStartOffset + connection.buffer.length;
@@ -373,6 +494,7 @@ export class MCPSerialManager {
         cursor: end,
         dropped: 0,
         has_more: false,
+        events: [...connection.events],
       };
     }
 
@@ -401,6 +523,8 @@ export class MCPSerialManager {
       cursor: clamped + pos,
       dropped,
       has_more: region.indexOf('\n', pos) !== -1,
+      // Only events the caller has not seen yet.
+      events: connection.events.filter((e) => e.cursor > since),
     };
   }
 
@@ -514,6 +638,8 @@ export class MCPSerialManager {
       c.bufferStartOffset += c.buffer.length;
       c.buffer = '';
       c.lineRemainder = '';
+      c.events = [];
+      c.crashPendingDetail = null;
     }
   }
 
@@ -524,6 +650,8 @@ export class MCPSerialManager {
     board: string | null;
     cursor: number | null;
     buffered_chars: number | null;
+    event_count: number;
+    last_event: SerialEvent | null;
   } {
     const c = this.connection;
     return {
@@ -533,6 +661,8 @@ export class MCPSerialManager {
       board: c?.board.name ?? null,
       cursor: c ? c.bufferStartOffset + c.buffer.length : null,
       buffered_chars: c ? c.buffer.length : null,
+      event_count: c?.events.length ?? 0,
+      last_event: c?.events.length ? c.events[c.events.length - 1] : null,
     };
   }
 
