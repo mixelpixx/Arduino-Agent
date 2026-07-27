@@ -5257,7 +5257,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"arduino-ide-extension@npm:2.3.7, arduino-ide-extension@workspace:arduino-ide-extension":
+"arduino-ide-extension@npm:2.3.10, arduino-ide-extension@workspace:arduino-ide-extension":
   version: 0.0.0-use.local
   resolution: "arduino-ide-extension@workspace:arduino-ide-extension"
   dependencies:
@@ -5411,7 +5411,7 @@ __metadata:
     "@theia/core": "npm:1.57.0"
     "@types/node": "npm:^18.0.0"
     "@types/ws": "npm:^8.5.10"
-    arduino-ide-extension: "npm:2.3.7"
+    arduino-ide-extension: "npm:2.3.10"
     rimraf: "npm:^5.0.0"
     typescript: "npm:^5.4.5"
     ws: "npm:^8.17.1"
@@ -8274,7 +8274,7 @@ __metadata:
     "@theia/preferences": "npm:1.57.0"
     "@theia/terminal": "npm:1.57.0"
     "@theia/workspace": "npm:1.57.0"
-    arduino-ide-extension: "npm:2.3.7"
+    arduino-ide-extension: "npm:2.3.10"
     arduino-mcp-extension: "npm:0.5.3"
     chmodr: "npm:^1.2.0"
     compression-webpack-plugin: "npm:^9.0.0"
