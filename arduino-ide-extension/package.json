@@ -4,7 +4,7 @@
   "description": "An extension for Theia building the Arduino IDE",
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "prepare": "yarn download-cli && yarn download-fwuploader && yarn download-ls && yarn copy-i18n && yarn download-examples",
+    "prepare": "yarn download-cli && yarn download-fwuploader && yarn download-ls && yarn copy-i18n && yarn download-examples && yarn bundle-agent-examples",
     "clean": "rimraf lib",
     "compose-changelog": "node ./scripts/compose-changelog.js",
     "download-cli": "node ./scripts/download-cli.js",
@@ -20,7 +20,8 @@
     "postbuild": "ncp ./src/node/cli-protocol/ ./lib/node/cli-protocol/",
     "watch": "tsc -w",
     "test": "cross-env IDE2_TEST=true mocha \"./lib/test/**/*.test.js\"",
-    "test:slow": "cross-env IDE2_TEST=true mocha \"./lib/test/**/*.slow-test.js\" --slow 5000"
+    "test:slow": "cross-env IDE2_TEST=true mocha \"./lib/test/**/*.slow-test.js\" --slow 5000",
+    "bundle-agent-examples": "node ../scripts/bundle-agent-examples.js"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.8.14",
