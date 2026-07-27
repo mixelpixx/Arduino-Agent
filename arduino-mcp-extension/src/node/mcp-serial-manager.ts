@@ -47,14 +47,28 @@ export class MCPSerialManager {
     portAddress: string,
     baudRate: number,
     fqbnOverride?: string
-  ): Promise<{ port: string; baudRate: number; board: string; fqbn: string }> {
+  ): Promise<{
+    port: string;
+    baudRate: number;
+    board: string;
+    fqbn: string;
+    requestedBaudRate?: number;
+    warning?: string;
+  }> {
     if (this.connection?.connected) {
       if (this.connection.port.address === portAddress) {
-        return this.statusForResult();
+        if (this.connection.baudRate === baudRate) {
+          return this.statusForResult();
+        }
+        // Reconnecting is the only reliable way to change the rate - see the
+        // note on stopping the monitor below - and silently reporting the old
+        // rate would hand back a status that does not match the wire.
+        await this.disconnect();
+      } else {
+        throw new Error(
+          `Already connected to ${this.connection.port.address}. Use the disconnect action first.`
+        );
       }
-      throw new Error(
-        `Already connected to ${this.connection.port.address}. Use the disconnect action first.`
-      );
     }
 
     const detectedPorts = await this.boardsService().getDetectedPorts();
@@ -85,8 +99,14 @@ export class MCPSerialManager {
     const port = entry.port;
     const manager = this.monitorManager();
 
-    // `changeMonitorSettings` only applies settings when it creates the monitor
-    // service, so set the baud rate before starting it.
+    // `changeMonitorSettings` only takes effect when the monitor service is
+    // CREATED, so an already-running service silently keeps its old baud rate
+    // and the caller reads garbage while we report the rate they asked for.
+    // A service can already exist without us having opened it - the IDE
+    // restarts the monitor by itself after an upload - so stop it first and
+    // let startMonitor build a fresh one from the settings below.
+    await manager.stopMonitor(board, port).catch(() => undefined);
+
     manager.changeMonitorSettings(board, port, {
       baudrate: {
         id: 'baudrate',
@@ -108,7 +128,27 @@ export class MCPSerialManager {
     if (!this.connection?.connected) {
       throw new Error(`Failed to connect the monitor on ${portAddress}`);
     }
-    return this.statusForResult();
+
+    // The monitor announces its real settings over the websocket
+    // (ON_SETTINGS_DID_CHANGE) and we track that, so `baudRate` below is always
+    // the rate actually in use. It can differ from the one asked for: the IDE
+    // keeps its own monitor settings for a port and will override us. Say so
+    // rather than returning a different number with no explanation - a silently
+    // ignored baud rate reads as broken hardware.
+    const result = this.statusForResult();
+    if (result.baudRate !== baudRate) {
+      return {
+        ...result,
+        requestedBaudRate: baudRate,
+        warning:
+          `The monitor for ${portAddress} is running at ${result.baudRate} baud; ` +
+          `the requested ${baudRate} was not applied because the IDE keeps its own ` +
+          `setting for this port. Output will be unreadable unless the sketch also ` +
+          `uses ${result.baudRate} - change the rate in the IDE's Serial Monitor, ` +
+          `or match it in Serial.begin().`,
+      };
+    }
+    return result;
   }
 
   private openWebSocket(
@@ -203,26 +243,27 @@ export class MCPSerialManager {
     return { bytesSent: Buffer.byteLength(data, 'utf8') };
   }
 
-  setBaudRate(baudRate: number): { baudRate: number } {
+  /**
+   * Changes the baud rate of the live connection.
+   *
+   * Sending CHANGE_SETTINGS over the websocket is not enough on its own: a
+   * monitor service that is already running keeps its original rate, so the
+   * old code reported the new rate while the wire stayed on the old one and
+   * the caller kept reading garbage. Reconnect instead - `connect` stops the
+   * monitor service and rebuilds it with these settings - so the value we
+   * report is the value in use.
+   *
+   * Note that reopening the port toggles DTR/RTS, which resets most boards.
+   */
+  async setBaudRate(baudRate: number): Promise<{ baudRate: number }> {
     const connection = this.requireConnection();
-    connection.ws.send(
-      JSON.stringify({
-        command: Monitor.ClientCommand.CHANGE_SETTINGS,
-        data: {
-          pluggableMonitorSettings: {
-            baudrate: {
-              id: 'baudrate',
-              label: 'Baudrate',
-              type: 'enum',
-              values: SUPPORTED_BAUD_RATES.map(String),
-              selectedValue: String(baudRate),
-            },
-          },
-        },
-      })
-    );
-    connection.baudRate = baudRate;
-    return { baudRate };
+    if (connection.baudRate === baudRate) {
+      return { baudRate };
+    }
+    const portAddress = connection.port.address;
+    const fqbn = connection.board.fqbn;
+    const result = await this.connect(portAddress, baudRate, fqbn);
+    return { baudRate: result.baudRate };
   }
 
   clear(): void {
