@@ -74,6 +74,23 @@ const DEFAULT_PORT = 3847;
 const MAX_TASKS = 100;
 const SKETCH_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 
+// Bounds for the `wait`/`timeout_seconds` option on compile/upload/task_status.
+// The default stays well under typical MCP client per-call timeouts; a timeout
+// returns current progress (not an error), so callers can simply re-wait.
+const TASK_WAIT_DEFAULT_SECONDS = 60;
+const TASK_WAIT_MIN_SECONDS = 5;
+const TASK_WAIT_MAX_SECONDS = 600;
+
+function clampTaskTimeout(value: unknown): number {
+  if (typeof value !== 'number' || !isFinite(value)) {
+    return TASK_WAIT_DEFAULT_SECONDS;
+  }
+  return Math.min(
+    TASK_WAIT_MAX_SECONDS,
+    Math.max(TASK_WAIT_MIN_SECONDS, value)
+  );
+}
+
 interface StructuredBuildError {
   message: string;
   file?: string;
@@ -116,6 +133,8 @@ export class ArduinoMCPServer {
 
   // Task management for async operations
   private readonly tasks = new Map<string, Task>();
+  // Completion promises so `wait` callers can block on a running task.
+  private readonly taskPromises = new Map<string, Promise<void>>();
   private taskCounter = 0;
 
   // State tracking
@@ -1057,11 +1076,15 @@ export class ArduinoMCPServer {
           fqbn: args.fqbn,
           verbose: args.verbose,
         });
-        setImmediate(() => this.runCompileTask(task));
+        this.launchTask(task, () => this.runCompileTask(task));
+        if (args.wait) {
+          return this.waitForTask(task, clampTaskTimeout(args.timeout_seconds));
+        }
         return {
           taskId: task.id,
+          status: task.status,
           message:
-            'Compilation started. Use arduino_task_status to check progress and arduino_build_output for compiler output.',
+            'Compilation started. Use arduino_task_status to check progress and arduino_build_output for compiler output. Tip: pass wait:true to block until it finishes.',
         };
       }
 
@@ -1075,11 +1098,15 @@ export class ArduinoMCPServer {
           port: args.port,
           verify: args.verify,
         });
-        setImmediate(() => this.runUploadTask(task));
+        this.launchTask(task, () => this.runUploadTask(task));
+        if (args.wait) {
+          return this.waitForTask(task, clampTaskTimeout(args.timeout_seconds));
+        }
         return {
           taskId: task.id,
+          status: task.status,
           message:
-            'Upload started. This will OVERWRITE firmware on the device. Use arduino_task_status to check progress.',
+            'Upload started. This will OVERWRITE firmware on the device. Use arduino_task_status to check progress. Tip: pass wait:true to block until it finishes.',
         };
       }
 
@@ -1602,7 +1629,14 @@ export class ArduinoMCPServer {
         if (!taskId) throw new Error('task_id is required');
         const task = this.tasks.get(taskId);
         if (!task) throw new Error(`Task not found: ${taskId}`);
+        if (
+          args.wait &&
+          (task.status === 'pending' || task.status === 'running')
+        ) {
+          return this.waitForTask(task, clampTaskTimeout(args.timeout_seconds));
+        }
         return {
+          taskId: task.id,
           status: task.status,
           result: task.result,
           error: task.error,
@@ -1627,10 +1661,61 @@ export class ArduinoMCPServer {
       status: 'pending',
       tool,
       arguments: args,
+      createdAt: Date.now(),
     };
     this.tasks.set(taskId, task);
     this.pruneTasks();
     return task;
+  }
+
+  /**
+   * Starts a task runner and keeps its completion promise so `wait` callers
+   * can block on it. The runners never reject (all paths are caught), but the
+   * catch guard keeps a future bug from becoming an unhandled rejection.
+   */
+  private launchTask(task: Task, runner: () => Promise<void>): void {
+    this.taskPromises.set(
+      task.id,
+      runner().catch(() => undefined)
+    );
+  }
+
+  /**
+   * Blocks until the task reaches a terminal status or the timeout elapses.
+   * A timeout is NOT an error: the caller gets the current status/progress and
+   * the taskId, and can keep waiting via arduino_task_status {wait:true}.
+   */
+  private async waitForTask(
+    task: Task,
+    timeoutSeconds: number
+  ): Promise<unknown> {
+    const completion = this.taskPromises.get(task.id) ?? Promise.resolve();
+    let timer: NodeJS.Timeout | undefined;
+    const finished = await Promise.race([
+      completion.then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutSeconds * 1000);
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (!finished) {
+      return {
+        taskId: task.id,
+        status: task.status,
+        progress: task.progress,
+        progressMessage: task.progressMessage,
+        timed_out: true,
+        hint: `Still running after ${timeoutSeconds}s. Call arduino_task_status with task_id "${task.id}" and wait:true to keep waiting.`,
+      };
+    }
+    return {
+      taskId: task.id,
+      status: task.status,
+      result: task.result,
+      error: task.error,
+      progress: task.progress,
+      progressMessage: task.progressMessage,
+    };
   }
 
   private pruneTasks(): void {
@@ -1638,8 +1723,13 @@ export class ArduinoMCPServer {
       return;
     }
     for (const [id, task] of this.tasks) {
-      if (task.status === 'completed' || task.status === 'failed') {
+      if (
+        task.status === 'completed' ||
+        task.status === 'failed' ||
+        task.status === 'cancelled'
+      ) {
         this.tasks.delete(id);
+        this.taskPromises.delete(id);
       }
       if (this.tasks.size <= MAX_TASKS) {
         return;
@@ -1649,6 +1739,7 @@ export class ArduinoMCPServer {
 
   private async runCompileTask(task: Task): Promise<void> {
     task.status = 'running';
+    task.startedAt = Date.now();
     task.progress = 0;
     task.progressMessage = 'Preparing compilation...';
 
@@ -1687,11 +1778,13 @@ export class ArduinoMCPServer {
         executableSectionsSize: summary?.executableSectionsSize,
       };
       task.status = 'completed';
+      task.finishedAt = Date.now();
       task.progress = 100;
       task.progressMessage = 'Compilation complete';
       this.recordBuild('compile', []);
     } catch (e) {
       task.status = 'failed';
+      task.finishedAt = Date.now();
       const errors = this.structuredErrorsOf(e);
       task.error = `Compilation failed: ${
         e instanceof Error ? e.message : e
@@ -1705,6 +1798,7 @@ export class ArduinoMCPServer {
 
   private async runUploadTask(task: Task): Promise<void> {
     task.status = 'running';
+    task.startedAt = Date.now();
     task.progress = 0;
     task.progressMessage = 'Preparing upload...';
     let compileFailed = false;
@@ -1783,11 +1877,13 @@ export class ArduinoMCPServer {
         portAfterUpload: result.portAfterUpload,
       };
       task.status = 'completed';
+      task.finishedAt = Date.now();
       task.progress = 100;
       task.progressMessage = 'Upload complete';
       this.recordBuild('upload', []);
     } catch (e) {
       task.status = 'failed';
+      task.finishedAt = Date.now();
       const errors = this.structuredErrorsOf(e);
       task.error = `${
         compileFailed ? 'Upload failed during compilation' : 'Upload failed'
