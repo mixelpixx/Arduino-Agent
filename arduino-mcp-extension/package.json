@@ -16,7 +16,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@theia/core": "1.57.0",
-    "arduino-ide-extension": "2.3.7",
+    "arduino-ide-extension": "2.3.10",
     "ws": "^8.17.1"
   },
   "devDependencies": {

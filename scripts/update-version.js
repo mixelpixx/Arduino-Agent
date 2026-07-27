@@ -35,14 +35,26 @@ if (!semver.gt(targetVersion, currentVersion)) {
 console.log(
   `🛠️ Updating current version from '${currentVersion}' to '${targetVersion}':`
 );
+// The IDE version is carried by these three packages. arduino-mcp-extension is
+// versioned separately (it tracks the MCP server, not the IDE) but it DEPENDS on
+// arduino-ide-extension, and workspace dependencies here are pinned to an exact
+// version - so it has to be visited too or its stale `arduino-ide-extension`
+// range stops matching the workspace and Yarn goes looking on the public
+// registry (`YN0035: ... Package not found`), breaking every build.
 for (const toUpdate of [
   path.join(repoRootPath, 'package.json'),
   path.join(repoRootPath, 'electron-app', 'package.json'),
   path.join(repoRootPath, 'arduino-ide-extension', 'package.json'),
+  path.join(repoRootPath, 'arduino-mcp-extension', 'package.json'),
 ]) {
   process.stdout.write(`  Updating ${toUpdate}'...`);
   const pkg = require(toUpdate);
-  pkg.version = targetVersion;
+  // Only the IDE packages carry the IDE version; arduino-mcp-extension keeps
+  // its own. Every package still gets its arduino-ide-* dependencies rewritten.
+  const ownsIdeVersion = pkg.name !== 'arduino-mcp-extension';
+  if (ownsIdeVersion) {
+    pkg.version = targetVersion;
+  }
   if ('dependencies' in pkg) {
     for (const dep of Object.keys(pkg['dependencies'])) {
       if (dep.startsWith('arduino-ide-')) {
@@ -51,7 +63,9 @@ for (const toUpdate of [
     }
   }
   fs.writeFileSync(toUpdate, JSON.stringify(pkg, null, 2) + '\n');
-  process.stdout.write(` ✅ Done.\n`);
+  process.stdout.write(
+    ownsIdeVersion ? ` ✅ Done.\n` : ` ✅ Done (dependencies only).\n`
+  );
 }
 
 console.log(
