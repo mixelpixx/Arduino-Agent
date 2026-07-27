@@ -51,7 +51,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     description: 'Serial monitor operations - connect, read output, send data to devices.',
     toolNames: ['arduino_serial'],
     useWhen:
-      'Debugging via serial output, sending commands to device, waiting for specific output (wait_for), following logs losslessly with cursor-based reads',
+      'Debugging via serial output, sending commands to device, waiting for specific output (wait_for), following logs losslessly with cursor-based reads, diagnosing crashes/resets via auto-detected events',
   },
   {
     name: 'library',

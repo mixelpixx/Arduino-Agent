@@ -277,7 +277,7 @@ export const ARDUINO_TOOLS: ToolDefinition[] = [
   {
     name: 'arduino_serial',
     description:
-      'Serial monitor operations - connect to a board, read its output, send data, change the baud rate. Reads are cursor-based: every read returns a `cursor`; pass it back as `since` to page through output losslessly. wait_for blocks until a line matching a pattern arrives. The connection is shared with the IDE serial monitor.',
+      'Serial monitor operations - connect to a board, read its output, send data, change the baud rate. Reads are cursor-based: every read returns a `cursor`; pass it back as `since` to page through output losslessly. wait_for blocks until a line matching a pattern arrives. Crash/reset signatures in the output (ESP32 panics, watchdog, brownout, reset reasons) are detected automatically and returned as `events` - a reset or crash also ends a pending wait_for early. The connection is shared with the IDE serial monitor.',
     inputSchema: {
       type: 'object',
       properties: {

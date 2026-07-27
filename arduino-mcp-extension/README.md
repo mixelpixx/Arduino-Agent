@@ -377,6 +377,25 @@ offset, a `dropped` count if the 512 KB buffer overflowed in between, and
 `read` returns the familiar tail snapshot. `wait_for` resolves with the
 matching line, or `timed_out: true` / `disconnected: true` (never an error).
 
+**Crash detection:** the output stream is scanned for crash/reset signatures
+and matches come back as `events` on every `read`/`wait_for` response (and as
+`event_count`/`last_event` in `get_config`):
+
+| Event type | Signature |
+|------------|-----------|
+| `reset` | ESP32 `rst:0x… (REASON)` boot line (reason in `detail`) |
+| `panic` | `Guru Meditation Error` (cause in `detail`, backtrace attached) |
+| `watchdog` | `Task watchdog got triggered`, AVR `wdt reset` |
+| `brownout` | `Brownout detector was triggered` (usually power supply) |
+| `abort` | `abort() was called` |
+
+A `reset`/`panic`/`brownout`/`abort` also **ends a pending `wait_for` early**
+with the event attached — the output you were waiting for is not coming from a
+board that just crashed. Watchdog warnings only record (they can be
+transient). Note: on native-USB boards (ESP32-S2/S3/C3 with CDC), the ROM
+bootloader's `rst:` line may not appear on the USB port; app-level panics and
+watchdog messages still do.
+
 ### arduino_library
 
 | Action | Parameters | Description |
