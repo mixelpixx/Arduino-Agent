@@ -37,13 +37,14 @@ making the IDE a first-class participant in the conversation:
 
 ## Download
 
-**Latest release: [v0.5.2](https://github.com/mixelpixx/Arduino-Agent/releases/tag/v0.5.2)** — unsigned development builds:
+Unsigned development builds of the **[latest release](https://github.com/mixelpixx/Arduino-Agent/releases/latest)** — these links always point at the newest version:
 
-- [**Windows x64**](https://github.com/mixelpixx/Arduino-Agent/releases/download/v0.5.2/arduino-ide-mcp-windows.zip)
-- [**macOS**](https://github.com/mixelpixx/Arduino-Agent/releases/download/v0.5.2/arduino-ide-mcp-macos.zip)
-- [**Linux x64**](https://github.com/mixelpixx/Arduino-Agent/releases/download/v0.5.2/arduino-ide-mcp-linux.zip)
+- [**Windows x64**](https://github.com/mixelpixx/Arduino-Agent/releases/latest/download/arduino-ide-mcp-windows.zip)
+- [**macOS**](https://github.com/mixelpixx/Arduino-Agent/releases/latest/download/arduino-ide-mcp-macos.zip)
+- [**Linux x64**](https://github.com/mixelpixx/Arduino-Agent/releases/latest/download/arduino-ide-mcp-linux.zip)
 
-Unzip and run `Arduino IDE` (`Arduino IDE.exe` on Windows). Older builds are on the
+Unzip and run `Arduino IDE` (`Arduino IDE.exe` on Windows). Release notes and
+older builds are on the
 [Releases](https://github.com/mixelpixx/Arduino-Agent/releases) page.
 
 > These are unsigned dev builds. On macOS you may need to allow the app under
