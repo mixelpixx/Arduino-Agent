@@ -66,10 +66,15 @@ Example with auto-launch on Windows:
 
 | Request | Response |
 |---------|----------|
-| `initialize` | Succeeds (answered locally), so the client connects |
+| `initialize` | Succeeds (answered locally) with the server's workflow `instructions` and the `prompts` capability, so the client connects fully featured |
 | `tools/list` | The tools seen last time this bridge talked to the IDE, or `[]` on a cold start |
 | `tools/call` | A tool result with `isError: true` and the message above |
 | `resources/list`, `prompts/list` | Empty lists |
+| `prompts/get` | The launch-the-IDE error |
+
+The instructions are loaded from the compiled extension when present (source
+of truth) with an embedded fallback; the smoke test asserts bridge/server
+parity so the copies cannot drift silently.
 
 Session handling is automatic: if the IDE restarts and invalidates the session
 (HTTP 404) or rotates the token (HTTP 401), the bridge re-runs the handshake and

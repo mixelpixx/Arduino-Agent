@@ -54,10 +54,10 @@ The extension provides 11 tools covering the entire Arduino development workflow
 | Tool | Description |
 |------|-------------|
 | `arduino_sketch` | Create, open, edit sketches; browse and clone examples |
-| `arduino_compile` | Asynchronous compilation with progress tracking |
-| `arduino_upload` | Upload firmware to connected boards (destructive operation) |
-| `arduino_board` | Board detection, selection, and hardware reference |
-| `arduino_serial` | Serial monitor: connect, read, write, disconnect |
+| `arduino_compile` | Compilation with `wait:true` one-call results, or async with progress tracking |
+| `arduino_upload` | Compile + flash in one call (destructive); failures explained |
+| `arduino_board` | Board detection with USB vid/pid, FQBN suggestion, selection, hardware reference |
+| `arduino_serial` | Serial monitor: cursor-based reads, `wait_for`, crash/reset event detection |
 | `arduino_library` | Search, install, and manage Arduino libraries |
 | `arduino_context` | Query current IDE state |
 | `arduino_task_status` | Monitor async operation progress |

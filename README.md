@@ -110,10 +110,10 @@ Unzip and run `Arduino IDE` (`Arduino IDE.exe` on Windows). Older builds are on 
 | Category | Operations |
 |----------|------------|
 | **Sketches** | Create, open, and edit sketches; read/write code; browse and clone built-in examples |
-| **Build** | Compile with live progress; capture real compiler output and structured errors |
-| **Upload** | Flash firmware to a connected board (guarded as a destructive action) |
-| **Boards** | Detect connected boards; query pin capabilities (PWM/I2C/SPI); install cores |
-| **Serial** | Connect, read, and write the serial monitor — shared with the IDE's own monitor |
+| **Build** | Compile with `wait:true` for one-call results; live progress; real compiler output with structured, explained errors |
+| **Upload** | Compile + flash in one call; failures come back explained (bootloader mode, busy port, wrong FQBN, power) |
+| **Boards** | Detect connected boards with USB vid/pid; identify unknown boards (`suggest_fqbn`); pin capabilities; install cores |
+| **Serial** | Cursor-based lossless reads; `wait_for` a pattern; automatic crash/reset/watchdog/brownout detection |
 | **Libraries** | Search the registry; install/remove; browse library examples |
 | **Formatting** | Format Arduino/C++ with clang-format |
 | **Config** | Sketchbook location, board-manager URLs, IDE settings |
@@ -213,18 +213,22 @@ Every step ran as an MCP call, with no manual work in the IDE. In one pass the
 agent wrote a WiFi scanner, flashed it, and read 21 access points back off the
 board.
 
-That session is also where the current release's fixes came from — uploading a
-never-compiled sketch, serial baud rates silently not applying, and boards
-whose core isn't installed being invisible to the agent were all found by
-driving a physical board, not by reading code.
+Those sessions shaped the tooling itself. v0.6.0 turned every pain point they
+surfaced into a feature: `wait:true` replaces polling loops, serial reads are
+lossless and cursor-based, crashes/resets/watchdogs are detected and reported
+as events, upload failures come back explained, and `suggest_fqbn` identifies
+boards arduino-cli can't. The server also now teaches connected agents its own
+workflow (instructions at connect, `/bringup`-style prompts, a Claude Code
+skill).
 
 Release builds for **Windows, macOS and Linux** are produced by CI and attached
 to every tagged release.
 
 **Known limits:** artifacts are unsigned. Boards whose USB VID/PID appear in no
-`boards.txt` (many ESP32-S3 devkits) can't be auto-identified — pass an explicit
-FQBN. Uploading over a board's *native* USB port can require manual bootloader
-entry; a UART bridge port works without it.
+`boards.txt` (many ESP32-S3 devkits) can't be auto-identified — use
+`arduino_board suggest_fqbn`, then pass the FQBN explicitly. Uploading over a
+board's *native* USB port can require manual bootloader entry; a UART bridge
+port works without it.
 
 Contributions and bug reports are welcome via
 [Issues](https://github.com/mixelpixx/arduino-mcp/issues) and pull requests.
