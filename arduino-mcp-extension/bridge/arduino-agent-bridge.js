@@ -90,7 +90,7 @@ const PROBE_TIMEOUT_MS = 1000;
  * KEEP IN SYNC with src/common/mcp-instructions.ts - the manual smoke test
  * compares the bridge's initialize.instructions with the HTTP server's.
  */
-const FALLBACK_INSTRUCTIONS = `Arduino Agent - an Arduino IDE with this MCP server embedded. You share one editor, one board and one serial monitor with the user; prefer these tools over asking the user to click in the IDE.
+const FALLBACK_INSTRUCTIONS = `Open Duino - an Arduino IDE with this MCP server embedded. You share one editor, one board and one serial monitor with the user; prefer these tools over asking the user to click in the IDE.
 
 Recommended workflow:
 1. arduino_context for current state (open sketch, selected board/port, connected boards with USB vid/pid).
@@ -143,30 +143,31 @@ function sleep(ms) {
 }
 
 /**
- * ARDUINO_AGENT_PATH, following the 0.7.0 rename of the executable from
- * `Arduino IDE` to `Arduino Agent` (`Arduino IDE.exe`, or on macOS
- * `Arduino IDE.app/Contents/MacOS/Arduino IDE`). When a path written for an
- * older release no longer exists but the renamed one does, use that, so
- * existing MCP configs keep working after an upgrade.
+ * ARDUINO_AGENT_PATH is retained for compatibility with existing MCP configs.
+ * If it names an old Arduino IDE or Arduino Agent executable, try the matching
+ * Open Duino path before giving up.
  */
 function resolveAgentExecutable(exe) {
-  if (!exe || fs.existsSync(exe) || !exe.includes('Arduino IDE')) return exe;
-  const candidates = [
-    path.join(path.dirname(exe), path.basename(exe).split('Arduino IDE').join('Arduino Agent')),
-    exe.split('Arduino IDE').join('Arduino Agent'),
-  ];
+  if (!exe || fs.existsSync(exe)) return exe;
+  const candidates = [];
+  for (const oldName of ['Arduino IDE', 'Arduino Agent']) {
+    for (const newName of ['Open Duino', 'Arduino Agent']) {
+      const candidate = exe.split(oldName).join(newName);
+      if (candidate !== exe) candidates.push(candidate);
+    }
+  }
   const renamed = candidates.find((p) => fs.existsSync(p));
   if (!renamed) return exe;
-  warn(`ARDUINO_AGENT_PATH points at ${exe}, which no longer exists; using ${renamed} instead (the executable was renamed in Arduino Agent 0.7.0 - update the setting)`);
+  warn(`ARDUINO_AGENT_PATH points at ${exe}, which no longer exists; using ${renamed} instead. Update the setting when convenient.`);
   return renamed;
 }
 
 /** The message shown when a tool needs the IDE and it is not reachable. */
 function offlineMessage(detail) {
   const lines = [
-    'Arduino Agent is not running, so this Arduino tool cannot run right now.',
+    'Open Duino is not running, so this Arduino tool cannot run right now.',
     '',
-    'Open the Arduino Agent IDE and call the tool again - the connection ' +
+    'Open the Open Duino IDE and call the tool again - the connection ' +
       'recovers on its own; there is no need to restart this client.',
   ];
   if (detail) {
@@ -185,12 +186,12 @@ function offlineMessage(detail) {
 function upstreamErrorMessage(err) {
   if (err && err.status === 401) {
     return (
-      'Arduino Agent rejected the bridge\'s auth token. The IDE writes a fresh ' +
+      'Open Duino rejected the bridge\'s auth token. The IDE writes a fresh ' +
       `token to ${TOKEN_FILE} when it starts; restart the IDE, or set ` +
       'ARDUINO_MCP_TOKEN in this MCP server\'s config if you use a custom token.'
     );
   }
-  return `Arduino Agent bridge error: ${err ? err.message : 'unknown error'}`;
+  return `Open Duino bridge error: ${err ? err.message : 'unknown error'}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +399,7 @@ class Upstream {
         spawnError = err;
       });
       child.unref();
-      warn(`starting Arduino Agent: ${exe}`);
+      warn(`starting Open Duino: ${exe}`);
     } catch (err) {
       spawnError = err;
     }
@@ -606,7 +607,7 @@ async function callTool(id, msg) {
               progressToken,
               progress: Math.round(elapsedMs / 1000),
               total: LAUNCH_TIMEOUT_MS / 1000,
-              message: 'Starting Arduino Agent...',
+              message: 'Starting Open Duino...',
             },
           });
   const launch = await upstream.launchAndWait(onWaiting);
@@ -710,7 +711,7 @@ async function watchTick() {
   const tools = response?.result?.tools;
   if (!Array.isArray(tools)) return;
   upstreamTools = tools;
-  log('Arduino Agent is up');
+  log('Open Duino is up');
   if (advertised !== null && JSON.stringify(tools) !== advertised) {
     advertised = JSON.stringify(tools);
     log('tool list changed; notifying client');
@@ -744,7 +745,7 @@ process.stdin.on('data', (chunk) => {
       .catch((err) => {
         warn(`unhandled error: ${err.stack || err.message}`);
         if (msg && msg.id !== undefined && msg.id !== null) {
-          respondError(msg.id, -32603, `Arduino Agent bridge error: ${err.message}`);
+          respondError(msg.id, -32603, `Open Duino bridge error: ${err.message}`);
         }
       });
   }

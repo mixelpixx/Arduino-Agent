@@ -7,8 +7,8 @@ const path = require('path');
 const config = require('./package.json').theia.frontend.config;
 
 /**
- * Since 0.7.0 Arduino Agent keeps its Electron user data in its own folder
- * (`arduino-agent`, from the package name) instead of the official Arduino
+ * Open Duino keeps its Electron user data in its own folder
+ * (`open-duino`, from the package name) instead of the official Arduino
  * IDE's (`arduino-ide`), so the two no longer share a single-instance lock or
  * window state. On first start, carry over what lived in the shared folder:
  * the shell layout and per-sketch board selections (Local Storage, IndexedDB)

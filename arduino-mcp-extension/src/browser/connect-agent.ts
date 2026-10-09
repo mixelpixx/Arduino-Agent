@@ -1,6 +1,6 @@
 /**
- * "Connect an AI Agent": the in-IDE way to hook up Claude Code, Claude Desktop
- * or any MCP client.
+ * "Connect an AI Agent": the in-IDE way to hook up OpenCode, Claude Code,
+ * Claude Desktop or any MCP client.
  *
  * - Help > Connect an AI Agent... opens a dialog with copy-ready setups for this
  *   installation (real paths of the bundled bridge and of the app, the token).
@@ -19,6 +19,12 @@ import { Command, CommandContribution, CommandRegistry } from '@theia/core/lib/c
 import { MenuContribution, MenuModelRegistry } from '@theia/core/lib/common/menu';
 import { MessageService } from '@theia/core/lib/common/message-service';
 import { inject, injectable } from '@theia/core/shared/inversify';
+import { TerminalService } from '@theia/terminal/lib/browser/base/terminal-service';
+import URI from '@theia/core/lib/common/uri';
+import {
+  CurrentSketch,
+  SketchesServiceClientImpl,
+} from 'arduino-ide-extension/lib/browser/sketches-service-client-impl';
 import {
   MCPConnectionGuide,
   MCPConnectionSnippet,
@@ -31,7 +37,12 @@ export namespace ConnectAgentCommands {
   export const OPEN: Command = {
     id: 'arduino-agent.connect-ai-agent',
     label: 'Connect an AI Agent...',
-    category: 'Arduino Agent',
+    category: 'Open Duino',
+  };
+  export const OPEN_OPENCODE: Command = {
+    id: 'open-duino.open-opencode-chat',
+    label: 'OpenCode Chat',
+    category: 'Open Duino',
   };
 }
 
@@ -61,9 +72,18 @@ export class ConnectAgentContribution
   @inject(StorageService)
   private readonly storage!: StorageService;
 
+  @inject(TerminalService)
+  private readonly terminalService!: TerminalService;
+
+  @inject(SketchesServiceClientImpl)
+  private readonly sketchesServiceClient!: SketchesServiceClientImpl;
+
   registerCommands(registry: CommandRegistry): void {
     registry.registerCommand(ConnectAgentCommands.OPEN, {
       execute: () => this.openDialog(),
+    });
+    registry.registerCommand(ConnectAgentCommands.OPEN_OPENCODE, {
+      execute: () => this.openOpenCodeChat(),
     });
   }
 
@@ -73,6 +93,11 @@ export class ConnectAgentContribution
       commandId: ConnectAgentCommands.OPEN.id,
       label: ConnectAgentCommands.OPEN.label,
       order: '0',
+    });
+    registry.registerMenuAction([...CommonMenus.HELP, '0_agent'], {
+      commandId: ConnectAgentCommands.OPEN_OPENCODE.id,
+      label: ConnectAgentCommands.OPEN_OPENCODE.label,
+      order: '1',
     });
   }
 
@@ -109,8 +134,8 @@ export class ConnectAgentContribution
       // last 5 minutes (each Claude session's bridge counts once it fetches tools).
       text = n === 1 ? '$(hubot) Agent active' : `$(hubot) ${n} agents active`;
       tooltip =
-        `${n} MCP client${n === 1 ? '' : 's'} used Arduino Agent in the last 5 minutes ` +
-        `(each AI session with Arduino Agent configured counts once) on ${url}. Click for connection setup.`;
+        `${n} MCP client${n === 1 ? '' : 's'} used Open Duino in the last 5 minutes ` +
+        `(each AI session with Open Duino configured counts once) on ${url}. Click for connection setup.`;
     } else {
       text = '$(hubot) MCP ready';
       tooltip = `MCP server listening on ${url}. Click to connect an AI agent.`;
@@ -132,7 +157,7 @@ export class ConnectAgentContribution
     await this.storage.setData(HINT_SHOWN_KEY, true);
     const show = 'Show me how';
     const choice = await this.messageService.info(
-      'Arduino Agent is ready for your AI assistant. Connect Claude Code, Claude Desktop or another MCP client in one step.',
+      'Open Duino is ready for your AI assistant. Connect OpenCode, Claude Code or another MCP client in one step.',
       show
     );
     if (choice === show) {
@@ -145,6 +170,51 @@ export class ConnectAgentContribution
     this.showStatus(guide.status);
     await new ConnectAgentDialog(guide, this.clipboard).open();
   }
+
+  /** Opens OpenCode's TUI in the integrated terminal beside the sketch. */
+  private async openOpenCodeChat(): Promise<void> {
+    try {
+      const sketch = this.sketchesServiceClient.tryGetCurrentSketch();
+      const sketchDir = CurrentSketch.isValid(sketch)
+        ? new URI(sketch.uri).parent
+        : undefined;
+      const isWindows = /^win/i.test(navigator.platform);
+      const windowsCwd = sketchDir ? windowsPathFromFileUri(sketchDir.toString()) : undefined;
+      const terminal = await this.terminalService.newTerminal({
+        title: 'OpenCode · Open Duino',
+        ...(isWindows
+          ? { shellPath: 'cmd.exe', shellArgs: ['/d', '/k'] }
+          : { cwd: sketchDir?.toString() }),
+      });
+      await terminal.start();
+      this.terminalService.open(terminal);
+      terminal.sendText(
+        isWindows
+          ? `cd /d "${windowsCwd ?? '%USERPROFILE%'}" && opencode\r`
+          : 'opencode\r'
+      );
+    } catch (error) {
+      this.messageService.error(`No se pudo iniciar OpenCode en la terminal integrada: ${String(error)}`);
+    }
+  }
+
+}
+
+/** OpenCode's core/instructions source recurses when Windows path casing
+ * differs from Git's project root. Start cmd explicitly and `cd /d` using the
+ * canonical uppercase drive before launching OpenCode. */
+function windowsPathFromFileUri(uri: string): string | undefined {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(uri);
+  } catch {
+    return undefined;
+  }
+  const match = decoded.match(/^file:\/\/\/([a-z]):\/(.*)$/i);
+  if (!match) {
+    return undefined;
+  }
+  return `${match[1].toUpperCase()}:\\${match[2].replace(/\//g, '\\')}`;
 }
 
 class ConnectAgentDialog extends AbstractDialog<void> {

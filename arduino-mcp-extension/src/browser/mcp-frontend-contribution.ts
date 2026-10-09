@@ -75,7 +75,7 @@ export class MCPFrontendContribution
           break;
         case 'arduino.mcp.requireAuth':
           this.messageService.info(
-            'The MCP authentication setting takes effect after restarting Arduino Agent.',
+            'The MCP authentication setting takes effect after restarting Open Duino.',
             { timeout: 8000 }
           );
           break;
@@ -193,7 +193,7 @@ export class MCPFrontendContribution
     const fileName = event.uri.split('/').pop() || event.uri;
     const action = event.type === 'created' ? 'Created' : 'Updated';
     this.messageService.info(
-      `${action} by Claude: ${fileName}`,
+      `${action} by an AI agent: ${fileName}`,
       { timeout: 3000 }
     );
   }
@@ -237,9 +237,8 @@ export class MCPFrontendContribution
       await this.mcpService.setEnabled(enabled);
 
       if (enabled) {
-        const config = await this.mcpService.getClientConfig();
         this.messageService.info(
-          `MCP server enabled. Claude Code configuration:\n${config}`,
+          'MCP server enabled. Use Help > Connect an AI Agent to link a client.',
           { timeout: 15000 }
         );
       } else {
@@ -260,7 +259,7 @@ export class MCPFrontendContribution
         ? 'Router mode (4 meta-tools)'
         : 'Direct mode (all tools)';
       this.messageService.info(
-        `MCP tool mode changed to: ${modeDesc}. Reconnect Claude Code to apply.`,
+        `MCP tool mode changed to: ${modeDesc}. Reconnect your AI client to apply.`,
         { timeout: 5000 }
       );
     } catch (error) {
@@ -275,9 +274,8 @@ export class MCPFrontendContribution
     }
     try {
       await this.mcpService.setPort(port);
-      const config = await this.mcpService.getClientConfig();
       this.messageService.info(
-        `MCP server moved to port ${port}. Updated Claude Code configuration:\n${config}`,
+        `MCP server moved to port ${port}. Refresh the client setup from Help > Connect an AI Agent.`,
         { timeout: 15000 }
       );
     } catch (error) {

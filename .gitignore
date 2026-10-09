@@ -23,3 +23,10 @@ electron-app/dist
 
 # Yarn local install state (machine-specific cache)
 .yarn/install-state.gz
+# Local Electron and Theia cache used by the development launcher.
+.dev-cache/
+# Local caches and generated development packages are not source artifacts.
+.cache/
+electron-app/dist-open-duino/
+__pycache__/
+*.py[cod]

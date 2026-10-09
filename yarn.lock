@@ -5372,37 +5372,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"arduino-ide@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "arduino-ide@workspace:."
-  dependencies:
-    "@theia/cli": "npm:1.57.0"
-    "@typescript-eslint/eslint-plugin": "npm:^5.59.0"
-    "@typescript-eslint/parser": "npm:^5.59.0"
-    "@xhmikosr/downloader": "npm:^13.0.1"
-    eslint: "npm:^8.39.0"
-    eslint-config-prettier: "npm:^8.8.0"
-    eslint-plugin-prettier: "npm:^4.2.1"
-    eslint-plugin-react: "npm:^7.32.2"
-    eslint-plugin-react-hooks: "npm:^4.6.0"
-    eslint-plugin-unused-imports: "npm:^2.0.0"
-    husky: "npm:^6.0.0"
-    ignore-styles: "npm:^5.0.1"
-    js-yaml: "npm:4.1.0"
-    lerna: "npm:^7.1.4"
-    lint-staged: "npm:^11.0.0"
-    node-fetch: "npm:^2.6.1"
-    node-gyp: "npm:^9.3.0"
-    prettier: "npm:^2.3.1"
-    reflect-metadata: "npm:^0.1.10"
-    rimraf: "npm:^5.0.0"
-    semver: "npm:^7.3.2"
-    style-dictionary: "npm:^3.7.0"
-    typescript: "npm:^5.4.5"
-    xhr2: "npm:^0.2.1"
-  languageName: unknown
-  linkType: soft
-
 "arduino-mcp-extension@npm:0.7.1, arduino-mcp-extension@workspace:arduino-mcp-extension":
   version: 0.0.0-use.local
   resolution: "arduino-mcp-extension@workspace:arduino-mcp-extension"
@@ -14294,11 +14263,11 @@ __metadata:
 
 "node-pty@patch:node-pty@npm%3A0.11.0-beta24#~/.yarn/patches/node-pty-npm-0.11.0-beta24-bb53864dbd.patch":
   version: 0.11.0-beta24
-  resolution: "node-pty@patch:node-pty@npm%3A0.11.0-beta24#~/.yarn/patches/node-pty-npm-0.11.0-beta24-bb53864dbd.patch::version=0.11.0-beta24&hash=047db5"
+  resolution: "node-pty@patch:node-pty@npm%3A0.11.0-beta24#~/.yarn/patches/node-pty-npm-0.11.0-beta24-bb53864dbd.patch::version=0.11.0-beta24&hash=e307d0"
   dependencies:
     nan: "npm:^2.17.0"
     node-gyp: "npm:latest"
-  checksum: 10c0/46c055d10388b54069c0958b418810f2c425e120e3d78dd0c8f30cb4d4a41b86128b05feab330bbd81490c3d9d8c8151233ff5817d6c87da8447dd0e042e0549
+  checksum: 10c0/da059d3f67fff434be63a8ef83cb08bc7cb2234ccd964fa643264e7e096fecd9e22bd9c3414cb89979876db8337dc8fb33b8535bf2ad6ca90e0eb8cb4210ae74
   languageName: node
   linkType: hard
 
@@ -14806,6 +14775,37 @@ __metadata:
   checksum: 10c0/4eef7c6abfef697dd4479345a4100c382d73c149d2d56170a54a07418c50816937ad09500e1ed1e79d235989d073a9bade8557122aee24f0576ecde0f392bb6c
   languageName: node
   linkType: hard
+
+"open-duino@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "open-duino@workspace:."
+  dependencies:
+    "@theia/cli": "npm:1.57.0"
+    "@typescript-eslint/eslint-plugin": "npm:^5.59.0"
+    "@typescript-eslint/parser": "npm:^5.59.0"
+    "@xhmikosr/downloader": "npm:^13.0.1"
+    eslint: "npm:^8.39.0"
+    eslint-config-prettier: "npm:^8.8.0"
+    eslint-plugin-prettier: "npm:^4.2.1"
+    eslint-plugin-react: "npm:^7.32.2"
+    eslint-plugin-react-hooks: "npm:^4.6.0"
+    eslint-plugin-unused-imports: "npm:^2.0.0"
+    husky: "npm:^6.0.0"
+    ignore-styles: "npm:^5.0.1"
+    js-yaml: "npm:4.1.0"
+    lerna: "npm:^7.1.4"
+    lint-staged: "npm:^11.0.0"
+    node-fetch: "npm:^2.6.1"
+    node-gyp: "npm:^9.3.0"
+    prettier: "npm:^2.3.1"
+    reflect-metadata: "npm:^0.1.10"
+    rimraf: "npm:^5.0.0"
+    semver: "npm:^7.3.2"
+    style-dictionary: "npm:^3.7.0"
+    typescript: "npm:^5.4.5"
+    xhr2: "npm:^0.2.1"
+  languageName: unknown
+  linkType: soft
 
 "open@npm:^7.4.2":
   version: 7.4.2

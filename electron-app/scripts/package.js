@@ -27,9 +27,9 @@ async function run() {
     electronVersion,
     '-c.extraMetadata.version',
     version,
-    // Arduino Agent: its own `name`, so its userData (localStorage, single-instance lock) is separate from the official IDE. arduino-ide-electron-main.js migrates the old data once.
+    // Open Duino: its own app data folder and single-instance lock, separate from the official Arduino IDE.
     '-c.extraMetadata.name',
-    'arduino-agent',
+    'open-duino',
     `-c.${platform}.artifactName`,
     artifactName,
     '-c.extraMetadata.theia.frontend.config.appVersion',
@@ -51,6 +51,7 @@ async function run() {
     //   updateChannel
     // );
   }
+  args.push(...process.argv.slice(2));
   const cp = exec('electron-builder', args, { stdio: 'inherit' });
   await cp;
 }
@@ -102,7 +103,7 @@ async function getVersion() {
 async function getArtifactName(version) {
   const { platform, arch } = process;
   version = isNightly ? `nightly-${await timestamp()}` : version;
-  const name = 'arduino-agent';
+  const name = 'open-duino';
   switch (platform) {
     case 'win32': {
       if (arch === 'x64') {

@@ -1,7 +1,7 @@
 {
   "name": "arduino-mcp-extension",
   "version": "0.7.1",
-  "description": "MCP (Model Context Protocol) server embedded in Arduino IDE - HTTP/SSE transport",
+  "description": "Open Duino MCP server with OpenCode integration - HTTP/SSE transport",
   "license": "AGPL-3.0-or-later",
   "main": "lib/node/arduino-mcp-backend-module",
   "types": "lib/node/arduino-mcp-backend-module",
@@ -10,6 +10,7 @@
     "arduino",
     "mcp",
     "claude",
+    "opencode",
     "http",
     "sse"
   ],
@@ -36,7 +37,7 @@
     "build": "tsc",
     "test:bridge": "node --test test/bridge/bridge.test.js",
     "test:palette": "node --test test/theme/agent-palette.test.js",
-    "build:dev": "yarn build",
+    "build:dev": "npm run build",
     "watch": "tsc -w"
   }
 }

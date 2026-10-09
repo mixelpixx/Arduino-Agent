@@ -538,7 +538,7 @@ export class SettingsComponent extends React.Component<
           <p style={{ marginTop: 0, marginBottom: '16px', opacity: 0.8, fontSize: '12px' }}>
             {nls.localize(
               'arduino/preferences/mcp.description',
-              'MCP enables AI assistants like Claude Code to work in Arduino Agent with you - compiling sketches, uploading code, managing libraries, and more.'
+              'MCP lets OpenCode and other AI assistants work with you in Open Duino: editing sketches, compiling, uploading, and managing libraries.'
             )}
           </p>
         </div>

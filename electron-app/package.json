@@ -46,7 +46,7 @@
     "prepare": "theia download:plugins",
     "prebuild": "rimraf lib",
     "build": "theia build",
-    "prebuild:dev": "yarn prebuild",
+    "prebuild:dev": "npm run prebuild",
     "build:dev": "theia build --config webpack.dev.js --mode development",
     "test": "mocha \"./test/**/*.test.js\"",
     "start": "theia start --plugins=local-dir:../plugins",
@@ -60,7 +60,7 @@
     "target": "electron",
     "frontend": {
       "config": {
-        "applicationName": "Arduino Agent",
+        "applicationName": "Open Duino",
         "defaultTheme": {
           "light": "arduino-theme",
           "dark": "arduino-theme-dark"
@@ -69,7 +69,7 @@
         "validatePreferencesSchema": false,
         "electron": {
           "showWindowEarly": true,
-          "uriScheme": "arduino-agent"
+          "uriScheme": "openduino"
         },
         "reloadOnReconnect": true,
         "preferences": {
@@ -103,11 +103,15 @@
       }
     }
   },
-  "author": "mixelpixx",
-  "description": "Arduino Agent: the Arduino IDE with a built-in MCP server",
+  "author": "Lanuzadev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lanuzadev/Open-Duino.git"
+  },
+  "description": "Open Duino: an AI-assisted Arduino development environment",
   "build": {
-    "appId": "io.github.mixelpixx.arduino-agent",
-    "productName": "Arduino Agent",
+    "appId": "org.openduino.desktop",
+    "productName": "Open Duino",
     "asar": false,
     "detectUpdateChannel": false,
     "generateUpdatesFilesForAllChannels": true,
@@ -152,6 +156,9 @@
       }
     ],
     "win": {
+      "icon": "resources/icon.ico",
+      "publisherName": "Lanuzadev",
+      "signAndEditExecutable": false,
       "target": [
         "msi",
         "nsis",
@@ -210,14 +217,7 @@
         }
       ]
     },
-    "afterSign": "scripts/notarize.js",
-    "publish": [
-      {
-        "provider": "s3",
-        "bucket": "arduino-downloads-prod-beagle",
-        "path": "arduino-ide/nightly"
-      }
-    ]
+    "afterSign": "scripts/notarize.js"
   },
   "theiaPluginsDir": "plugins",
   "theiaPlugins": {

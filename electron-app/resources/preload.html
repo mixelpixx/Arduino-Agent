@@ -3,14 +3,14 @@
         /* The colors are hard-coded and based on the `editor.background` and `editor.foreground` values from `./arduino-ide-extension/src/browser/data/default.color-theme.json` */
         @media (prefers-color-scheme: light) {
             html {
-                background: #ffffff;
+                background: #0a1220;
             }
         }
 
         /* The colors are hard-coded and based on the `editor.background` and `editor.foreground` values from `./arduino-ide-extension/src/browser/data/dark.color-theme.json` */
         @media (prefers-color-scheme: dark) {
             html {
-                background: #1f272a;
+                background: #0a1220;
             }
         }
 
@@ -74,17 +74,17 @@
 <body>
     <div class="spinner-container">
         <div class="custom-spinner">
-            <svg id="spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-              <defs>
-                <linearGradient id="agentBg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stop-color="rgb(79, 70, 229)"/>
-                  <stop offset="1" stop-color="rgb(49, 46, 129)"/>
-                </linearGradient>
-              </defs>
-              <rect x="48" y="48" width="928" height="928" rx="220" fill="url(#agentBg)"/>
-              <polygon points="432,250 592,250 774,790 610,790 512,499 414,790 250,790" fill="#FFFFFF"/>
-              <polygon points="470,600 554,600 584,688 440,688" fill="#FFFFFF"/>
-              <polygon points="792,192 819.04,268.96 896,296 819.04,323.04 792,400 764.96,323.04 688,296 764.96,268.96" fill="rgb(251, 191, 36)"/>
+            <svg id="spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+              <g fill="none" stroke="#00d5e8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M164 124V68m60 56V42m64 82V42m60 82V68M164 388v56m60-56v82m64-82v82m60-82v56M124 164H68m56 60H42m82 64H42m82 60H68m264-184h56m-56 60h82m-82 64h82m-82 60h56" stroke-width="16"/>
+                <path d="M164 70l-20-20m116-8 20-20m60 46 20-20m-196 396-20 20m116 8 20 20m60-46 20 20M70 164l-20-20m-8 116-20 20m46 60-20 20m396-196 20-20m8 116 20 20m-46 60 20 20" stroke-width="12"/>
+              </g>
+              <g fill="#f7a928">
+                <circle cx="144" cy="50" r="12"/><circle cx="288" cy="22" r="12"/><circle cx="368" cy="50" r="12"/><circle cx="144" cy="462" r="12"/><circle cx="288" cy="490" r="12"/><circle cx="368" cy="462" r="12"/>
+                <circle cx="50" cy="144" r="12"/><circle cx="22" cy="288" r="12"/><circle cx="50" cy="368" r="12"/><circle cx="462" cy="144" r="12"/><circle cx="490" cy="288" r="12"/><circle cx="462" cy="368" r="12"/>
+              </g>
+              <rect x="116" y="116" width="280" height="280" rx="54" fill="#071a36" stroke="#0b3c75" stroke-width="12"/>
+              <path d="m220 204-54 52 54 52m72-104 54 52-54 52" fill="none" stroke="#00d5e8" stroke-linecap="round" stroke-linejoin="round" stroke-width="24"/>
             </svg>
         </div>
     </div>

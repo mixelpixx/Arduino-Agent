@@ -1,6 +1,6 @@
-# Arduino MCP Extension
+# Open Duino MCP Extension
 
-MCP (Model Context Protocol) server **embedded directly** in Arduino IDE 2.x, enabling AI assistants like Claude Code to programmatically interact with the IDE.
+MCP (Model Context Protocol) server **embedded directly** in Open Duino, enabling OpenCode and other AI assistants to work with the IDE and attached boards.
 
 Designed with **STEM education** in mind - includes built-in example browsing, hardware reference data, and beginner-friendly error explanations.
 
@@ -11,7 +11,7 @@ The extension embeds the MCP server directly in the IDE using HTTP transport
 
 ```
 +------------------+     HTTP (Bearer auth)  +------------------+
-|   Claude Code    |<----------------------->|   Arduino IDE    |
+| OpenCode / agent |<----------------------->|   Open Duino     |
 |   (MCP Client)   |   http://127.0.0.1:3847 |   (MCP Server)   |
 +------------------+          /mcp           +------------------+
                                                       ↓
@@ -22,7 +22,7 @@ The extension embeds the MCP server directly in the IDE using HTTP transport
                                              Config)
 ```
 
-**The Arduino IDE IS the MCP server** - no sidecar process, no abstraction layer.
+**Open Duino is the MCP server** - no sidecar process, no abstraction layer.
 
 ## Security
 
@@ -253,7 +253,7 @@ Expected response:
 ```json
 {
   "status": "ok",
-  "server": "arduino-agent",
+      "server": "open-duino",
   "version": "0.5.0",
   "uptime": 123,
   "auth": true

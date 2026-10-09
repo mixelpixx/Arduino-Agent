@@ -10,7 +10,7 @@
  * (the stdio bridge must answer initialize locally when the IDE is closed).
  * The manual smoke test asserts the two stay identical.
  */
-export const MCP_SERVER_INSTRUCTIONS = `Arduino Agent - an Arduino IDE with this MCP server embedded. You share one editor, one board and one serial monitor with the user; prefer these tools over asking the user to click in the IDE.
+export const MCP_SERVER_INSTRUCTIONS = `Open Duino - an Arduino IDE with this MCP server embedded. You share one editor, one board and one serial monitor with the user; prefer these tools over asking the user to click in the IDE.
 
 Recommended workflow:
 1. arduino_context for current state (open sketch, selected board/port, connected boards with USB vid/pid).

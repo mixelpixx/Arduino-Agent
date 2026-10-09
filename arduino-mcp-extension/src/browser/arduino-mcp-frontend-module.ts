@@ -27,14 +27,14 @@ export default new ContainerModule((bind, unbind, isBound, rebind) => {
   // Bind MCP preferences to add settings to the IDE preferences panel
   bindMCPPreferences(bind);
 
-  // Arduino Agent identity: no Arduino IDE updater, fork-specific About dialog
+  // Open Duino identity: no Arduino IDE updater, fork-specific About dialog
   rebind(CheckForIDEUpdates).to(DisabledIDEUpdateCheck).inSingletonScope();
   rebind(About).to(AgentAbout).inSingletonScope();
   bind(RemoveIDEUpdaterCommand).toSelf().inSingletonScope();
   bind(CommandContribution).toService(RemoveIDEUpdaterCommand);
   bind(MenuContribution).toService(RemoveIDEUpdaterCommand);
 
-  // Arduino Agent colors: Arduino's themes recolored teal -> indigo (agent-theme.ts)
+  // Open Duino colors: adapted light and dark themes (agent-theme.ts)
   rebind(MonacoThemingService).to(AgentMonacoThemingService).inSingletonScope();
   bind(AgentThemeStyles).toSelf().inSingletonScope();
   bind(FrontendApplicationContribution).toService(AgentThemeStyles);

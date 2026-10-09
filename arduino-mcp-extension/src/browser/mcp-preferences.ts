@@ -50,7 +50,7 @@ export const mcpPreferenceSchema: PreferenceSchema = {
       type: 'boolean',
       description: nls.localize(
         'arduino/mcp/preferences.enabled',
-        'Enable MCP (Model Context Protocol) server integration. When enabled, AI assistants like Claude Code can interact with Arduino Agent programmatically - compiling, uploading, managing libraries, and more.'
+        'Enable MCP (Model Context Protocol) server integration. When enabled, AI assistants like OpenCode can interact with Open Duino - compiling, uploading, managing libraries, and more.'
       ),
       default: MCPConfigurationDefaults['arduino.mcp.enabled'],
       order: 1,
@@ -59,7 +59,7 @@ export const mcpPreferenceSchema: PreferenceSchema = {
       type: 'boolean',
       description: nls.localize(
         'arduino/mcp/preferences.autoConnect',
-        'Automatically start the MCP server when Arduino Agent launches. Disable this if you want to manually control when the MCP server is available.'
+        'Automatically start the MCP server when Open Duino launches. Disable this if you want to manually control when the MCP server is available.'
       ),
       default: MCPConfigurationDefaults['arduino.mcp.autoConnect'],
       order: 2,
@@ -68,7 +68,7 @@ export const mcpPreferenceSchema: PreferenceSchema = {
       type: 'number',
       description: nls.localize(
         'arduino/mcp/preferences.port',
-        'HTTP port for the MCP server. Claude Code connects to http://127.0.0.1:{port}/mcp. Change this if port 3847 is already in use. The server restarts on the new port immediately.'
+        'HTTP port for the MCP server. MCP clients connect to http://127.0.0.1:{port}/mcp. Change this if port 3847 is already in use. The server restarts on the new port immediately.'
       ),
       default: MCPConfigurationDefaults['arduino.mcp.port'],
       minimum: 1024,

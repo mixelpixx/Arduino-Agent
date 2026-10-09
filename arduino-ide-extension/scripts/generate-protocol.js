@@ -247,42 +247,91 @@
   // rmSync(out, { recursive: true, maxRetries: 5, force: true });
   mkdirSync(out, { recursive: true });
 
+  let pluginLauncherDir;
   try {
+    let tsPluginPath = path.resolve(
+      __dirname,
+      '..',
+      'node_modules',
+      '.bin',
+      `protoc-gen-ts${platform === 'win32' ? '.cmd' : ''}`
+    );
+
+    // protoc cannot launch a Windows .cmd shim directly, so use a native
+    // launcher that forwards its stdin and stdout to the Node-based plugin.
+    if (platform === 'win32') {
+      pluginLauncherDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'arduino-protoc-gen-ts-')
+      );
+      tsPluginPath = path.join(pluginLauncherDir, 'protoc-gen-ts.exe');
+      exec(
+        'go',
+        [
+          'build',
+          '-o',
+          tsPluginPath,
+          path.join(__dirname, 'protoc-plugin-launcher.go'),
+        ],
+        {
+          cwd: pluginLauncherDir,
+          env: { ...process.env, GO111MODULE: 'off' },
+          logStdout: true,
+        }
+      );
+    }
+
     // Generate JS code from the `.proto` files.
     exec(
-      'grpc_tools_node_protoc',
+      process.execPath,
       [
+        require.resolve('grpc-tools/bin/protoc.js'),
         `--js_out=import_style=commonjs,binary:${out}`,
         `--grpc_out=generate_package_definition:${out}`,
         '-I',
         protosFolder,
         ...protos,
       ],
-      { logStdout: true }
+      {
+        env: {
+          ...process.env,
+          OPENDUINO_NODE_EXE: process.execPath,
+          OPENDUINO_TS_PLUGIN: require.resolve(
+            'grpc_tools_node_protoc_ts/bin/protoc-gen-ts'
+          ),
+        },
+        logStdout: true,
+      }
     );
 
     // Generate the `.d.ts` files for JS.
     exec(
       path.join(protoc, `protoc${platform === 'win32' ? '.exe' : ''}`),
       [
-        `--plugin=protoc-gen-ts=${path.resolve(
-          __dirname,
-          '..',
-          'node_modules',
-          '.bin',
-          `protoc-gen-ts${platform === 'win32' ? '.cmd' : ''}`
-        )}`,
+        `--plugin=protoc-gen-ts=${tsPluginPath}`,
         `--ts_out=generate_package_definition:${out}`,
         '-I',
         protosFolder,
         ...protos,
       ],
-      { logStdout: true }
+      {
+        env: {
+          ...process.env,
+          OPENDUINO_NODE_EXE: process.execPath,
+          OPENDUINO_TS_PLUGIN: require.resolve(
+            'grpc_tools_node_protoc_ts/bin/protoc-gen-ts'
+          ),
+        },
+        logStdout: true,
+      }
     );
   } catch (error) {
-    console.log(error);
+    console.error(error);
+    process.exitCode = 1;
   } finally {
     rmSync(protosFolder, { recursive: true, maxRetries: 5, force: true });
+    if (pluginLauncherDir) {
+      rmSync(pluginLauncherDir, { recursive: true, maxRetries: 5, force: true });
+    }
   }
 
   console.log('<<< Generation was successful.');

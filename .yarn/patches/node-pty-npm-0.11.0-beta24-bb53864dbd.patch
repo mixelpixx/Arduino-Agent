@@ -1,38 +1,20 @@
-diff --git a/binding.gyp b/binding.gyp
-index 66411ec3f7caa6880ad0f6284682fce5b0067416..bba36bf3be2a5d947a205e42658b50a18d368115 100644
---- a/binding.gyp
-+++ b/binding.gyp
-@@ -6,7 +6,8 @@
-             'VCCLCompilerTool': {
-               'AdditionalOptions': [
-                 '/Qspectre',
--                '/guard:cf'
-+                '/guard:cf',
-+                '-permissive'
-               ]
-             },
-             'VCLinkerTool': {
-diff --git a/src/win/conpty.cc b/src/win/conpty.cc
-index 25793a5e1c97aa63b59117eeb1aea6bc3a9ca3bf..58000c01c42e91e413ae86d6b762908007e46cb1 100644
---- a/src/win/conpty.cc
-+++ b/src/win/conpty.cc
-@@ -32,12 +32,17 @@ extern "C" void init(v8::Local<v8::Object>);
-   ProcThreadAttributeValue(22, FALSE, TRUE, FALSE)
+diff --git a/src/win/winpty.cc b/src/win/winpty.cc
+index b054dee2194226a823f5c98befdecf06cda2e5dd..d92e4f4001e4708955e29a1db03c5ed6f92c340f 100644
+--- a/src/win/winpty.cc
++++ b/src/win/winpty.cc
+@@ -165,6 +165,7 @@ static NAN_METHOD(PtyStartProcess) {
+     goto cleanup;
+   }
+
++  {
+   int cols = info[4]->Int32Value(Nan::GetCurrentContext()).FromJust();
+   int rows = info[5]->Int32Value(Nan::GetCurrentContext()).FromJust();
+   bool debug = Nan::To<bool>(info[6]).FromJust();
+@@ -234,6 +235,7 @@ static NAN_METHOD(PtyStartProcess) {
+   info.GetReturnValue().Set(marshal);
  
- typedef VOID* HPCON;
-+
-+#endif
-+
-+// These typedefs must exist regardless of the SDK version. Newer Windows SDKs
-+// (>= 10.0.26100) define PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, which previously
-+// skipped these declarations and broke the build with "PFNCREATEPSEUDOCONSOLE
-+// undeclared identifier". Fixed upstream in later node-pty releases.
- typedef HRESULT (__stdcall *PFNCREATEPSEUDOCONSOLE)(COORD c, HANDLE hIn, HANDLE hOut, DWORD dwFlags, HPCON* phpcon);
- typedef HRESULT (__stdcall *PFNRESIZEPSEUDOCONSOLE)(HPCON hpc, COORD newSize);
- typedef void (__stdcall *PFNCLOSEPSEUDOCONSOLE)(HPCON hpc);
+   goto cleanup;
++  }
  
--#endif
--
- struct pty_baton {
-   int id;
-   HANDLE hIn;
+ cleanup:
+   delete filename;

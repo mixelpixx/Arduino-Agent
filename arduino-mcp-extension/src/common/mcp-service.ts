@@ -33,7 +33,7 @@ export const ACTIVE_CLIENT_WINDOW_MS = 5 * 60 * 1000;
 
 /** One ready-to-paste way of connecting a client. */
 export interface MCPConnectionSnippet {
-  id: 'claude-code' | 'bridge-config' | 'http-config';
+  id: 'claude-code' | 'opencode-cli' | 'opencode-config' | 'bridge-config' | 'http-config';
   title: string;
   description: string;
   text: string;

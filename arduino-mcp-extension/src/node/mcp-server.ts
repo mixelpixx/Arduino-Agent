@@ -492,7 +492,7 @@ export class ArduinoMCPServer {
             `Port ${this.port} is in use. Change the arduino.mcp.port preference or set the ARDUINO_MCP_PORT env var.`
           );
           this.startError =
-            `Port ${this.port} is already in use, probably by another running copy of Arduino Agent. ` +
+            `Port ${this.port} is already in use, probably by another running copy of Open Duino. ` +
             'Close it, or choose another port in Preferences > MCP.';
         } else {
           this.startError = `The MCP server could not start: ${err.message}`;
@@ -509,7 +509,7 @@ export class ArduinoMCPServer {
             this.requireAuth ? 'required' : 'DISABLED'
           })`
         );
-        mcpLog.info('Claude Code config:\n' + this.buildClientConfig());
+        mcpLog.info('MCP client config:\n' + this.buildClientConfig());
         resolve();
       });
     });
@@ -705,7 +705,7 @@ export class ArduinoMCPServer {
       res.end(
         JSON.stringify({
           status: 'ok',
-          server: 'arduino-agent',
+          server: 'open-duino',
           version: EXTENSION_VERSION,
           uptime: Math.floor((Date.now() - this.startTime) / 1000),
           auth: this.requireAuth,
@@ -719,7 +719,7 @@ export class ArduinoMCPServer {
       res.end(
         JSON.stringify({
           error:
-            'Unauthorized. Pass the MCP token as an "Authorization: Bearer <token>" header. The token is shown in Arduino Agent (Preferences > MCP) and stored in ~/.arduinoIDE/mcp-token.',
+            'Unauthorized. Pass the MCP token as an "Authorization: Bearer <token>" header. The token is shown in Open Duino (Preferences > MCP) and stored in ~/.arduinoIDE/mcp-token.',
         })
       );
       return;
@@ -847,7 +847,7 @@ export class ArduinoMCPServer {
    */
   private createMCPServerInstance(): Server {
     const server = new Server(
-      { name: 'arduino-agent', version: EXTENSION_VERSION },
+      { name: 'open-duino', version: EXTENSION_VERSION },
       {
         capabilities: { tools: {}, prompts: {} },
         // Workflow guidance delivered to every client at initialize.

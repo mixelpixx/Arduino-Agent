@@ -1,5 +1,5 @@
 /**
- * Arduino Agent identity for the vendored Arduino IDE shell.
+ * Open Duino identity for the vendored Arduino IDE shell.
  *
  * arduino-ide-extension is upstream code synced by file copy, so the fork's
  * identity lives here as rebinds and contributions rather than as edits there.
@@ -8,7 +8,7 @@
  *   so it would offer the official Arduino IDE as an "update" and replace this
  *   app, MCP server included. Board and library update checks stay on: they
  *   share the `arduino.checkForUpdates` preference, so that is left alone.
- * - The About dialog names Arduino Agent, its own version and the Arduino IDE
+ * - The About dialog names Open Duino, its own version and the Arduino IDE
  *   version it is based on, and says it is not an Arduino product.
  *
  * arduino-ide-extension ships no type declarations, so its classes are `any`
@@ -89,7 +89,10 @@ export class AgentAbout extends About {
       `CLI Version: ${cliVersion}`,
       `Based on Arduino IDE ${versionOf('arduino-ide-extension') ?? ''}`,
       '',
-      'Arduino Agent is an independent fork of the Arduino IDE. It is not affiliated with or endorsed by Arduino SA.',
+      'Created by Lanuzadev',
+      'Repository: https://github.com/lanuzadev/Open-Duino',
+      '',
+      'Open Duino is an independent fork of the Arduino IDE. It is not affiliated with or endorsed by Arduino SA.',
       `Arduino IDE: Copyright © ${new Date().getFullYear()} Arduino s.r.l. and/or its affiliated companies`,
     ].join('\n');
 
@@ -97,8 +100,8 @@ export class AgentAbout extends About {
     const copy = 'Copy';
     const buttons = !isWindows && !isOSX ? [copy, ok] : [ok, copy];
     const { response } = await this.agentDialogService.showMessageBox({
-      message: 'Arduino Agent',
-      title: 'Arduino Agent',
+      message: 'Open Duino',
+      title: 'Open Duino',
       type: 'info',
       detail,
       buttons,

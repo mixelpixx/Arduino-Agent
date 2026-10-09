@@ -44,8 +44,8 @@ Studio Installer (Individual Components tab).
 ## Build steps
 
 ```bash
-git clone https://github.com/mixelpixx/arduino-mcp.git
-cd arduino-mcp
+git clone https://github.com/lanuzadev/Open-Duino.git
+cd Arduino-Agent
 
 corepack enable
 yarn install            # applies the bundled node-pty patch automatically
@@ -74,12 +74,12 @@ yarn exec theia build --config webpack.config.js --mode production
 # wrong user-data folder and skips its bundled plugins.
 node ../node_modules/electron-builder/cli.js --dir --publish never \
   -c.electronVersion=30.1.2 \
-  -c.extraMetadata.name=arduino-agent \
+  -c.extraMetadata.name=open-duino \
   -c.extraMetadata.main=./arduino-ide-electron-main.js \
   -c.extraMetadata.theia.frontend.config.buildDate="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
-The MCP server starts automatically at `http://127.0.0.1:3847` when the IDE
+Open Duino's MCP server starts automatically at `http://127.0.0.1:3847` when the IDE
 launches; the console prints a ready-to-paste client configuration including the
 auth token (stored in `~/.arduinoIDE/mcp-token`).
 

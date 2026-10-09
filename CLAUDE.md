@@ -1,4 +1,4 @@
-# Arduino Agent — repo guide for AI agents
+# Open Duino — repo guide for AI agents
 
 Fork of Arduino IDE 2.x (Theia/Electron) with an embedded MCP server.
 `arduino-ide-extension/` is **vendored upstream code** (synced from
@@ -42,7 +42,7 @@ release folder) without full packaging:
    file — piping through tail/grep has repeatedly swallowed the real error).
    If it dies with ENOTEMPTY on `lib/backend/native-webpack-plugin`, delete
    that directory and rerun (transient Windows file-lock race).
-3. Kill "Arduino Agent" processes ("Arduino IDE" before 0.7.0), copy
+3. Kill "Open Duino" processes (or "Arduino Agent" for a legacy build), copy
    `electron-app/lib/backend/main.js` over
    `<install>\resources\app\lib\backend\main.js`, relaunch.
 4. Confirm the copy landed by grepping the installed main.js for a distinctive

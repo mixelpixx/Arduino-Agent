@@ -161,7 +161,7 @@ jobs:
         # it correctly - which is why the Linux/macOS jobs already pass.
         #
         # The version/appVersion/cliVersion/buildDate metadata mirrors upstream's
-        # scripts/package.js, but with Arduino Agent's version: it is the version
+        # scripts/package.js, but with Open Duino's version: it is the version
         # in the window title and About dialog, and buildDate is what makes the
         # app load its bundled VS Code plugins (arduino-ide-electron-main.js).
         # The name gives the app its own userData folder (and single-instance
@@ -172,7 +172,7 @@ jobs:
           cli_version=$(node -p "require('../arduino-ide-extension/package.json').arduino['arduino-cli'].version")
           node ../node_modules/electron-builder/cli.js --dir --publish never \
             -c.electronVersion=30.1.2 \
-            -c.extraMetadata.name=arduino-agent \
+            -c.extraMetadata.name=open-duino \
             -c.extraMetadata.main=./arduino-ide-electron-main.js \
             -c.extraMetadata.version="$version" \
             -c.extraMetadata.theia.frontend.config.appVersion="$version" \
@@ -185,9 +185,7 @@ jobs:
         run: |
           $src = Get-ChildItem -Directory electron-app/dist |
             Where-Object { $_.Name -like '*-unpacked' } | Select-Object -First 1
-          Compress-Archive -Path "$($src.FullName)/*" -DestinationPath "arduino-agent-${{ matrix.platform }}.zip"
-          # Pre-0.7.0 asset name, kept so existing download links keep working.
-          Copy-Item "arduino-agent-${{ matrix.platform }}.zip" "arduino-ide-mcp-${{ matrix.platform }}.zip"
+          Compress-Archive -Path "$($src.FullName)/*" -DestinationPath "open-duino-${{ matrix.platform }}.zip"
 
       - name: Zip artifact (Linux/macOS)
         if: runner.os != 'Windows'
@@ -197,9 +195,7 @@ jobs:
           src=$(ls -d electron-app/dist/*-unpacked 2>/dev/null | head -1 || true)
           if [ -z "$src" ]; then src=$(ls -d electron-app/dist/mac* 2>/dev/null | head -1); fi
           if [ -z "$src" ]; then echo "No build output found under electron-app/dist"; ls -la electron-app/dist; exit 1; fi
-          ( cd "$src" && zip -ry "$GITHUB_WORKSPACE/arduino-agent-${{ matrix.platform }}.zip" . )
-          # Pre-0.7.0 asset name, kept so existing download links keep working.
-          cp "arduino-agent-${{ matrix.platform }}.zip" "arduino-ide-mcp-${{ matrix.platform }}.zip"
+          ( cd "$src" && zip -ry "$GITHUB_WORKSPACE/open-duino-${{ matrix.platform }}.zip" . )
 
       - name: Upload to draft release
         uses: softprops/action-gh-release@v2
@@ -209,16 +205,15 @@ jobs:
           draft: true # publish manually after verifying the artifacts
           fail_on_unmatched_files: true
           body: |
-            Unsigned build of Arduino Agent: the Arduino IDE with an embedded MCP server.
+            Unsigned build of Open Duino: the Arduino IDE with an embedded MCP server.
             Not affiliated with or endorsed by Arduino SA.
 
             Each archive contains the unpacked application for its platform - unzip and run
-            `Arduino Agent` (`Arduino Agent.exe` on Windows). The MCP server starts on
-            `http://127.0.0.1:3847`; the connection config (with the auth token) is printed
-            to the IDE console on launch.
+            `Open Duino` (`Open Duino.exe` on Windows). The MCP server starts on
+            `http://127.0.0.1:3847`; use **Help > Connect an AI Agent** to configure OpenCode
+            or another MCP client.
 
             Artifacts are unsigned; on macOS you may need to allow the app in
             System Settings > Privacy & Security.
           files: |
-            arduino-agent-${{ matrix.platform }}.zip
-            arduino-ide-mcp-${{ matrix.platform }}.zip
+            open-duino-${{ matrix.platform }}.zip

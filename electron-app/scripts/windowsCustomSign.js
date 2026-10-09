@@ -18,7 +18,7 @@ exports.default = async function (configuration) {
     CONTAINER_NAME
   ) {
     childProcess.execSync(
-      `"${SIGNTOOL_PATH}" sign -d "Arduino Agent" -f "${INSTALLER_CERT_WINDOWS_CER}" -csp "eToken Base Cryptographic Provider" -k "[{{${CERT_PASSWORD}}}]=${CONTAINER_NAME}" -fd sha256 -tr http://timestamp.digicert.com -td SHA256 -v "${filePath}"`,
+      `"${SIGNTOOL_PATH}" sign -d "Open Duino" -f "${INSTALLER_CERT_WINDOWS_CER}" -csp "eToken Base Cryptographic Provider" -k "[{{${CERT_PASSWORD}}}]=${CONTAINER_NAME}" -fd sha256 -tr http://timestamp.digicert.com -td SHA256 -v "${filePath}"`,
       { stdio: 'inherit' }
     );
   } else {

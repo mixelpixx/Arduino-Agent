@@ -1,7 +1,7 @@
 {
   "lerna": "2.4.0",
   "version": "independent",
-  "npmClient": "yarn",
+  "npmClient": "npm",
   "command": {
     "run": {
       "stream": true
